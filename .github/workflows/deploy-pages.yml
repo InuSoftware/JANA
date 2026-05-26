@@ -60,7 +60,7 @@ jobs:
           fs.writeFileSync("supabase-config.js", body);
           NODE
 
-      - name: Assemble site (so arquivos necessarios — sem db.json etc.)
+      - name: Assemble site (arquivos estaticos do app)
         run: |
           mkdir -p _site
           cp index.html app.js supabase-config.js _site/

@@ -1,8 +1,0 @@
-{
-  "name": "jana-supabase-tools",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.49.1"
-  }
-}

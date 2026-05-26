@@ -1,5 +1,36 @@
+# Dependências (MUITO IMPORTANTE!)
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Arquivos de configuração sensíveis
 supabase-config.js
-scripts/node_modules/
-/txt.txt
+.env
+.env.local
+.env.*.local
+
+# Arquivos temporários
+*.log
+*.tmp
+*.temp
 txt.txt
+copia.7z
 /copia.7z
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build e dist
+dist/
+build/
+*.min.jsnode_modules/

@@ -18,12 +18,6 @@
   };
 })();
 
-/** Mesmo host da pagina (PC ou celular na LAN); localhost no telefone apontaria para o proprio aparelho. */
-const API_BASE =
-  typeof window !== "undefined" && (window.location?.protocol === "http:" || window.location?.protocol === "https:")
-    ? `${window.location.protocol}//${window.location.hostname}:3001`
-    : "http://localhost:3001";
-
 /** Settings → API → Project URL (sem path). Remove /rest/v1 se vier da URL do Data API por engano. */
 function normalizeSupabaseProjectUrl(raw) {
   let u = String(raw || "").trim();
@@ -64,7 +58,7 @@ function defaultConfigPayload() {
     id: 1,
     useTables: false,
     useServiceFee: true,
-    activeTheme: "apple",
+    activeTheme: "blue-service",
     categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
     prepCategories: [],
     paymentMethods: [
@@ -333,7 +327,7 @@ const state = {
     id: 1,
     useTables: false,
     useServiceFee: true,
-    activeTheme: "apple",
+    activeTheme: "blue-service",
     categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
     prepCategories: [],
     paymentMethods: [
@@ -344,14 +338,13 @@ const state = {
     ]
   },
   cache: {
-    users: [],
     commandas: [],
     products: [],
     config: {
       id: 1,
       useTables: false,
       useServiceFee: true,
-      activeTheme: "apple",
+      activeTheme: "blue-service",
       categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
       prepCategories: [],
       paymentMethods: [
@@ -366,7 +359,6 @@ const state = {
 };
 
 function clearDataCache() {
-  state.cache.users = [];
   state.cache.products = [];
   state.cache.commandas = [];
   state.cache.dailyCloses = [];
@@ -512,100 +504,22 @@ function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
-async function apiGet(path) {
-  const response = await fetch(`${API_BASE}${path}`);
-  if (!response.ok) throw new Error(`GET ${path} failed`);
-  return response.json();
-}
-
-async function apiPost(path, body) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) throw new Error(`POST ${path} failed`);
-  return response.json();
-}
-
-async function apiPatch(path, body) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) throw new Error(`PATCH ${path} failed`);
-  return response.json();
-}
-
-async function apiDelete(path) {
-  const response = await fetch(`${API_BASE}${path}`, { method: "DELETE" });
-  if (!response.ok) throw new Error(`DELETE ${path} failed`);
-}
-
-async function bootstrapFromApi() {
-  const [users, products, commandas] = await Promise.all([
-    apiGet("/users"),
-    apiGet("/products"),
-    apiGet("/commandas")
-  ]);
-  let dailyCloses = [];
-  try {
-    dailyCloses = await apiGet("/dailyCloses");
-  } catch (_) {
-    dailyCloses = [];
-  }
-  let config = {
-    id: 1,
-    useTables: false,
-    useServiceFee: true,
-    activeTheme: "apple",
-    categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
-    prepCategories: [],
-    paymentMethods: [
-      { id: "card", name: "Cartao", active: true },
-      { id: "cash", name: "Dinheiro", active: true },
-      { id: "pix", name: "PIX", active: true },
-      { id: "voucher", name: "Vale Ref.", active: true }
-    ]
-  };
-  try {
-    config = await apiGet("/config/1");
-  } catch (_) {
-    config = await apiPost("/config", config);
-  }
-  state.cache.users = users;
-  state.cache.products = products;
-  state.cache.commandas = commandas;
-  state.cache.config = config;
-  state.cache.dailyCloses = Array.isArray(dailyCloses) ? dailyCloses : [];
-}
-
 function loadProducts() {
   return state.cache.products;
 }
 
 function saveProducts(products) {
   state.cache.products = products;
-  if (isSupabaseConfigured()) {
-    void (async () => {
-      for (const product of products) {
-        if (product.id === undefined || product.id === null || product.id === "") continue;
-        try {
-          await upsertProductRemote(product);
-        } catch (e) {
-          console.error("[JANA] saveProducts", e);
-        }
+  void (async () => {
+    for (const product of products) {
+      if (product.id === undefined || product.id === null || product.id === "") continue;
+      try {
+        await upsertProductRemote(product);
+      } catch (e) {
+        console.error("[JANA] saveProducts", e);
       }
-    })();
-    return;
-  }
-  void Promise.all(
-    products.map((product) => {
-      if (product.id !== undefined && product.id !== null && product.id !== "") return apiPatch(`/products/${product.id}`, product);
-      return Promise.resolve();
-    })
-  );
+    }
+  })();
 }
 
 function loadOrders() {
@@ -614,25 +528,16 @@ function loadOrders() {
 
 function saveOrders(orders) {
   state.cache.commandas = orders;
-  if (isSupabaseConfigured()) {
-    void (async () => {
-      for (const order of orders) {
-        if (order.id === undefined || order.id === null || order.id === "") continue;
-        try {
-          await upsertCommandaRemote(order);
-        } catch (e) {
-          console.error("[JANA] saveOrders", e);
-        }
+  void (async () => {
+    for (const order of orders) {
+      if (order.id === undefined || order.id === null || order.id === "") continue;
+      try {
+        await upsertCommandaRemote(order);
+      } catch (e) {
+        console.error("[JANA] saveOrders", e);
       }
-    })();
-    return;
-  }
-  void Promise.all(
-    orders.map((order) => {
-      if (order.id !== undefined && order.id !== null && order.id !== "") return apiPatch(`/commandas/${order.id}`, order);
-      return Promise.resolve();
-    })
-  );
+    }
+  })();
 }
 
 function loadDailyCloses() {
@@ -684,15 +589,10 @@ async function persistDailyClose(draft) {
     finalizedOrdersCount: draft.finalizedOrdersCount,
     sales: Array.isArray(draft.sales) ? draft.sales : []
   };
-  if (isSupabaseConfigured()) {
-    const id = crypto.randomUUID();
-    const saved = { ...payload, id };
-    await insertDailyCloseRemote(id, saved);
-    list.unshift(saved);
-  } else {
-    const saved = await apiPost("/dailyCloses", payload);
-    list.unshift(saved);
-  }
+  const id = crypto.randomUUID();
+  const saved = { ...payload, id };
+  await insertDailyCloseRemote(id, saved);
+  list.unshift(saved);
   state.cache.dailyCloses = list;
 }
 
@@ -706,11 +606,7 @@ async function rollbackLastDailyClose(dateYmd) {
         new Date(a.closedAt || `${a.dateYmd || ""}T00:00:00`).getTime()
     )[0];
   if (!target) return false;
-  if (isSupabaseConfigured()) {
-    await deleteDailyCloseRemote(target.id);
-  } else {
-    await apiDelete(`/dailyCloses/${target.id}`);
-  }
+  await deleteDailyCloseRemote(target.id);
   state.cache.dailyCloses = list.filter((entry) => String(entry.id) !== String(target.id));
   return true;
 }
@@ -785,7 +681,7 @@ function loadConfig() {
     id: 1,
     useTables: false,
     useServiceFee: true,
-    activeTheme: "apple",
+    activeTheme: "blue-service",
     categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
     prepCategories: [],
     paymentMethods: [
@@ -808,15 +704,11 @@ function loadConfig() {
 
 function saveConfig(config) {
   state.cache.config = config;
-  if (isSupabaseConfigured()) {
-    void upsertAppConfigRemote(config).catch((e) => console.error("[JANA] saveConfig", e));
-    return;
-  }
-  void apiPatch(`/config/${config.id || 1}`, config);
+  void upsertAppConfigRemote(config).catch((e) => console.error("[JANA] saveConfig", e));
 }
 
 function applyTheme() {
-  const theme = state.config.activeTheme || "apple";
+  const theme = state.config.activeTheme || "blue-service";
   document.documentElement.setAttribute("data-theme", theme);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
@@ -1221,40 +1113,16 @@ function renderReopenPanel() {
   });
 }
 
-function serializeCommandaForPost(order) {
-  return {
-    table: order.table || "",
-    customer: order.customer || "",
-    status: order.status || "Aberta",
-    items: order.items || [],
-    paymentMethods: order.paymentMethods || [],
-    serviceFeePercent: order.serviceFeePercent ?? 10,
-    totalPaid: order.totalPaid ?? 0,
-    createdAt: order.createdAt,
-    everHadItems: order.everHadItems === true
-  };
-}
-
 async function persistPendingOrderToServer() {
   const order = state.pendingNewOrder;
   if (!order) return;
   const orders = loadOrders();
-  if (isSupabaseConfigured()) {
-    order.id = crypto.randomUUID();
-    order.everHadItems = true;
-    orders.unshift({ ...order });
-    state.cache.commandas = orders;
-    state.pendingNewOrder = null;
-    state.selectedOrderId = order.id;
-    saveOrders(orders);
-    return;
-  }
-  const created = await apiPost("/commandas", serializeCommandaForPost(order));
-  const merged = { ...created, everHadItems: true };
-  orders.unshift(merged);
+  order.id = crypto.randomUUID();
+  order.everHadItems = true;
+  orders.unshift({ ...order });
   state.cache.commandas = orders;
   state.pendingNewOrder = null;
-  state.selectedOrderId = merged.id;
+  state.selectedOrderId = order.id;
   saveOrders(orders);
 }
 
@@ -1505,7 +1373,7 @@ function renderSettings() {
     button.addEventListener("click", () => deletePaymentMethod(button.dataset.methodId));
   });
 
-  refs.activeThemeLabel.textContent = `Tema ativo: ${THEME_PRESETS[state.config.activeTheme]?.label || "Apple"}`;
+  refs.activeThemeLabel.textContent = `Tema ativo: ${THEME_PRESETS[state.config.activeTheme]?.label || "Blue Service"}`;
   refs.themePresetList.innerHTML = Object.entries(THEME_PRESETS)
     .map(([key, preset]) => `
       <button class="theme-preset-button rounded-xl border p-2 text-left ${state.config.activeTheme === key ? "border-outline bg-primary-container text-on-primary-container" : "border-outline-variant bg-surface text-on-surface"}" data-theme-key="${key}">
@@ -1526,7 +1394,7 @@ function renderSettings() {
     `)
     .join("");
   refs.themePresetList.querySelectorAll(".theme-mini-card").forEach((card) => {
-    card.setAttribute("data-theme", card.dataset.themePreview || "apple");
+    card.setAttribute("data-theme", card.dataset.themePreview || "blue-service");
   });
   document.querySelectorAll(".theme-preset-button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -2242,11 +2110,7 @@ function deletePaymentMethod(methodId) {
 
 function deleteProduct(productId) {
   const products = loadProducts().filter((product) => String(product.id) !== String(productId));
-  if (isSupabaseConfigured()) {
-    void deleteProductRemote(productId).catch((e) => console.error("[JANA] deleteProduct", e));
-  } else {
-    void apiDelete(`/products/${productId}`);
-  }
+  void deleteProductRemote(productId).catch((e) => console.error("[JANA] deleteProduct", e));
   saveProducts(products);
   renderAll();
 }
@@ -2289,56 +2153,42 @@ function bindEvents() {
     const email = refs.usernameInput.value.trim();
     const password = refs.passwordInput.value.trim();
 
-    if (isSupabaseConfigured()) {
-      if (!email) {
-        refs.loginFeedback.textContent = "Informe o email.";
-        return;
-      }
-      if (!password) {
-        refs.loginFeedback.textContent = "Informe a senha.";
-        return;
-      }
-      try {
-        localStorage.setItem("jana_last_email", email);
-        const sb = await getSupabase();
-        if (!sb) {
-          refs.loginFeedback.textContent = "Supabase nao inicializado.";
-          return;
-        }
-        const { data: signData, error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) {
-          refs.loginFeedback.textContent = error.message || "Credenciais invalidas.";
-          return;
-        }
-        refs.loginForm.reset();
-        if (signData.session) {
-          await applySupabaseSession(signData.session);
-        } else {
-          refs.loginFeedback.textContent = "Login ok mas sessao vazia. Atualize a pagina.";
-          console.warn("[JANA] signInWithPassword sem session no retorno");
-        }
-      } catch (e) {
-        console.error(e);
-        refs.loginFeedback.textContent = "Falha no login.";
-      }
+    if (!isSupabaseConfigured()) {
+      refs.loginFeedback.textContent =
+        "Configure supabase-config.js com a URL do projeto e a chave anon (Settings → API).";
       return;
     }
-
-    const username = email;
-    const validUser = username
-      ? state.cache.users.find((user) => {
-        if (user.username !== username) return false;
-        if (!password) return true;
-        return user.password === password;
-      })
-      : state.cache.users[0];
-    if (!validUser) {
-      refs.loginFeedback.textContent = "Credenciais invalidas.";
+    if (!email) {
+      refs.loginFeedback.textContent = "Informe o email.";
       return;
     }
-    setLoggedUser(validUser);
-    refs.loginForm.reset();
-    renderAuth();
+    if (!password) {
+      refs.loginFeedback.textContent = "Informe a senha.";
+      return;
+    }
+    try {
+      localStorage.setItem("jana_last_email", email);
+      const sb = await getSupabase();
+      if (!sb) {
+        refs.loginFeedback.textContent = "Supabase nao inicializado.";
+        return;
+      }
+      const { data: signData, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        refs.loginFeedback.textContent = error.message || "Credenciais invalidas.";
+        return;
+      }
+      refs.loginForm.reset();
+      if (signData.session) {
+        await applySupabaseSession(signData.session);
+      } else {
+        refs.loginFeedback.textContent = "Login ok mas sessao vazia. Atualize a pagina.";
+        console.warn("[JANA] signInWithPassword sem session no retorno");
+      }
+    } catch (e) {
+      console.error(e);
+      refs.loginFeedback.textContent = "Falha no login.";
+    }
   });
 
   refs.biometricButton.addEventListener("click", () => {
@@ -2349,31 +2199,19 @@ function bindEvents() {
       refs.usernameInput.focus();
       return;
     }
-    if (isSupabaseConfigured()) {
-      refs.loginFeedback.textContent = "Nenhum email salvo. Faca login uma vez.";
-      return;
-    }
-    const quickUser = state.cache.users[0];
-    if (!quickUser) {
-      refs.loginFeedback.textContent = "API indisponivel. Inicie o json-server.";
-      return;
-    }
-    setLoggedUser(quickUser);
-    renderAuth();
+    refs.loginFeedback.textContent = "Nenhum email salvo. Faca login uma vez.";
   });
 
   refs.logoutButton.addEventListener("click", async () => {
     state.currentView = "main";
     refs.orderDialog.close();
-    if (isSupabaseConfigured()) {
-      try {
-        const sb = await getSupabase();
-        if (sb) await sb.auth.signOut();
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
+    try {
+      const sb = await getSupabase();
+      if (sb) await sb.auth.signOut();
+    } catch (e) {
+      console.error(e);
       clearLoggedUser();
+      clearDataCache();
       renderAuth();
     }
   });
@@ -2501,8 +2339,8 @@ function bindEvents() {
           state.cashCloseUiMessage = {
             type: "err",
             text: isSave
-              ? "Nao foi possivel salvar. Verifique se o json-server tem dailyCloses no db.json."
-              : "Nao foi possivel estornar. Verifique se o json-server tem dailyCloses no db.json."
+              ? "Nao foi possivel salvar o fechamento. Verifique a conexao com o Supabase."
+              : "Nao foi possivel estornar o fechamento. Verifique a conexao com o Supabase."
           };
           renderReports();
         }
@@ -2639,11 +2477,7 @@ function bindEvents() {
 
     if (!temItensNaComanda) {
       try {
-        if (isSupabaseConfigured()) {
-          await deleteCommandaRemote(target.id);
-        } else {
-          await apiDelete(`/commandas/${target.id}`);
-        }
+        await deleteCommandaRemote(target.id);
       } catch (_) {
         /* servidor indisponivel */
       }
@@ -2653,13 +2487,6 @@ function bindEvents() {
       target.status = "Cancelada";
       target.canceledAt = new Date().toISOString();
       saveOrders(orders);
-      if (!isSupabaseConfigured()) {
-        try {
-          await apiPatch(`/commandas/${target.id}`, target);
-        } catch (_) {
-          /* cache ja atualizado; PATCH pode falhar se servidor caiu */
-        }
-      }
     }
 
     state.cancelConfirmOpen = false;
@@ -2740,13 +2567,7 @@ function bindEvents() {
       products.unshift(newProduct);
       void (async () => {
         try {
-          if (isSupabaseConfigured()) {
-            await upsertProductRemote(newProduct);
-          } else {
-            const created = await apiPost("/products", { ...productData });
-            const idx = products.findIndex((p) => p === newProduct);
-            if (idx >= 0) products[idx] = created;
-          }
+          await upsertProductRemote(newProduct);
           saveProducts(products);
           renderAll();
         } catch (e) {
@@ -2914,53 +2735,46 @@ async function init() {
   bindPullToRefresh(refs.mainContent);
   bindPullToRefresh(refs.loginScreen);
 
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = await getSupabase();
-      if (!supabase) throw new Error("client");
-
-      const {
-        data: { session: existingSession }
-      } = await supabase.auth.getSession();
-      if (existingSession) {
-        await applySupabaseSession(existingSession);
-      } else {
-        renderAuth();
-      }
-
-      supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === "INITIAL_SESSION") {
-          if (!session) {
-            renderAuth();
-            return;
-          }
-          await applySupabaseSession(session);
-          return;
-        }
-        if (event === "SIGNED_OUT") {
-          clearDataCache();
-          clearLoggedUser();
-          renderAuth();
-        }
-      });
-    } catch (e) {
-      console.error(e);
-      refs.loginFeedback.textContent =
-        "Nao foi possivel iniciar o Supabase. Copie supabase-config.example.js para supabase-config.js e preencha.";
-      applyTheme();
-      renderAuth();
-    }
+  if (!isSupabaseConfigured()) {
+    refs.loginFeedback.textContent =
+      "Configure supabase-config.js com a URL do projeto e a chave anon (Settings → API).";
+    applyTheme();
+    renderAuth();
     return;
   }
 
   try {
-    await bootstrapFromApi();
-    state.config = loadConfig();
-    applyTheme();
-    renderAuth();
-  } catch (error) {
-    console.error(error);
-    refs.loginFeedback.textContent = "Nao foi possivel conectar na API local (json-server).";
+    const supabase = await getSupabase();
+    if (!supabase) throw new Error("client");
+
+    const {
+      data: { session: existingSession }
+    } = await supabase.auth.getSession();
+    if (existingSession) {
+      await applySupabaseSession(existingSession);
+    } else {
+      renderAuth();
+    }
+
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "INITIAL_SESSION") {
+        if (!session) {
+          renderAuth();
+          return;
+        }
+        await applySupabaseSession(session);
+        return;
+      }
+      if (event === "SIGNED_OUT") {
+        clearDataCache();
+        clearLoggedUser();
+        renderAuth();
+      }
+    });
+  } catch (e) {
+    console.error(e);
+    refs.loginFeedback.textContent =
+      "Nao foi possivel iniciar o Supabase. Verifique supabase-config.js (URL e chave anon).";
     applyTheme();
     renderAuth();
   }
