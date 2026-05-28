@@ -509,7 +509,7 @@ function computeCashCloseDraft(shift) {
   const activeOrdersCount = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta").length;
   return {
     shiftId: shift.id,
-    referenceDate: shift.referenceDate,
+    referenceDate: shift.referenceDate || "",
     activeOrdersCount,
     totalBruto: slice.reduce((s, o) => s + (o.totalPaid || 0), 0),
     finalizedOrdersCount: slice.length,
@@ -522,6 +522,40 @@ function computeCashCloseDraft(shift) {
       closedAt: order.closedAt || order.createdAt || null
     }))
   };
+}
+
+function isValidYmd(ymd) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ""))) return false;
+  const d = localDateFromYmd(ymd);
+  const [y, m, day] = String(ymd).slice(0, 10).split("-").map((n) => parseInt(n, 10));
+  return d.getFullYear() === y && d.getMonth() === m - 1 && d.getDate() === day;
+}
+
+/** Sugere o dia de referencia a partir das vendas do caixa ou da data ja definida no turno. */
+function suggestReferenceDateForShift(shift) {
+  if (!shift) return todayLocalYmd();
+  const orders = loadOrders();
+  const slice = ordersFinalizedInShift(orders, shift);
+  let minYmd = "";
+  for (const o of slice) {
+    const ymd = localYmdFromIso(o.closedAt || o.createdAt);
+    if (!ymd) continue;
+    if (!minYmd || ymd < minYmd) minYmd = ymd;
+  }
+  if (minYmd) return minYmd;
+  if (shift.referenceDate && isValidYmd(shift.referenceDate)) return shift.referenceDate;
+  return todayLocalYmdFromDate(new Date(shift.startedAt || Date.now()));
+}
+
+function getCashCloseReferenceDateForUi(shift) {
+  if (!shift) return todayLocalYmd();
+  if (state.cashCloseReferenceShiftId !== String(shift.id)) {
+    state.cashCloseReferenceShiftId = String(shift.id);
+    state.cashCloseReferenceDateYmd = suggestReferenceDateForShift(shift);
+  } else if (!state.cashCloseReferenceDateYmd) {
+    state.cashCloseReferenceDateYmd = suggestReferenceDateForShift(shift);
+  }
+  return state.cashCloseReferenceDateYmd;
 }
 
 async function ensureProfile(session, supabase) {
@@ -742,19 +776,25 @@ async function insertShiftRemote(shift) {
   return shiftRowToApp(data);
 }
 
-async function closeShiftRemote(shift, closePayload) {
+async function closeShiftRemote(shift, closePayload, referenceDateYmd) {
   const sb = await getSupabase();
   if (!sb) throw new Error("Supabase indisponivel");
   const endedAt = new Date().toISOString();
   const endedDate = new Date(endedAt);
+  const referenceDate =
+    referenceDateYmd && isValidYmd(referenceDateYmd)
+      ? referenceDateYmd
+      : shift.referenceDate || todayLocalYmdFromDate(endedDate);
+  const snapshot = { ...closePayload, referenceDate };
   const { data, error } = await sb
     .from("shifts")
     .update({
+      reference_date: referenceDate,
       status: "fechado",
       ended_at: endedAt,
       window_end_at: endedAt,
       scheduled_end: localHmFromDate(endedDate),
-      payload: { closeSnapshot: closePayload, closedAt: endedAt }
+      payload: { closeSnapshot: snapshot, closedAt: endedAt, referenceDate }
     })
     .eq("id", String(shift.id))
     .select("*")
@@ -784,14 +824,20 @@ async function openShiftManual() {
     startedAt: now.toISOString()
   });
   state.cache.shifts = [created, ...loadShifts().filter((s) => String(s.id) !== String(created.id))];
+  state.cashCloseReferenceDateYmd = "";
+  state.cashCloseReferenceShiftId = null;
   return created;
 }
 
-async function persistShiftClose(shift) {
+async function persistShiftClose(shift, referenceDateYmd) {
+  const ref = referenceDateYmd && isValidYmd(referenceDateYmd) ? referenceDateYmd : suggestReferenceDateForShift(shift);
   const draft = computeCashCloseDraft(shift);
-  const closed = await closeShiftRemote(shift, draft);
+  draft.referenceDate = ref;
+  const closed = await closeShiftRemote(shift, draft, ref);
   const list = loadShifts().map((s) => (String(s.id) === String(closed.id) ? closed : s));
   state.cache.shifts = list;
+  state.cashCloseReferenceDateYmd = "";
+  state.cashCloseReferenceShiftId = null;
   return closed;
 }
 
@@ -837,6 +883,8 @@ const state = {
   cashCloseUiMessage: null,
   cashClosePendingClose: false,
   cashClosePendingRollback: false,
+  cashCloseReferenceDateYmd: "",
+  cashCloseReferenceShiftId: null,
   cashCloseHistoryExpandedId: null,
   config: {
     id: 1,
@@ -2294,8 +2342,16 @@ function renderReports() {
         <p class="text-sm text-on-surface-variant">Nao ha caixa aberto. Toque em <strong>Abrir caixa</strong> no Inicio antes de fechar.</p>
         <button type="button" id="openCashCloseHistoryButton" class="mt-3 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Ver historico de caixas fechados</button>`;
     } else {
+      const refYmd = getCashCloseReferenceDateForUi(shift);
+      const refDisplay = refYmd ? refYmd.split("-").reverse().join("/") : "";
       body = `
-      <p class="text-xs text-on-surface-variant">Fecha o <strong>caixa atual</strong> (${formatShiftLabel(shift)}). Entram todas as comandas finalizadas desde a abertura — sem horario fixo.</p>
+      <p class="text-xs text-on-surface-variant">Fecha o <strong>caixa atual</strong> (${formatShiftLabel(shift)}). Entram todas as comandas finalizadas desde a abertura.</p>
+      <div class="mt-stack-md rounded-xl border border-outline-variant bg-surface-container-low px-3 py-3">
+        <label for="cashCloseReferenceDateInput" class="text-xs font-bold text-on-surface">Este caixa e referente a qual dia?</label>
+        <input type="date" id="cashCloseReferenceDateInput" value="${refYmd}"
+          class="mt-2 h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface" />
+        <p class="mt-1.5 text-[10px] text-on-surface-variant">Usado nos relatorios e no historico (ex.: operacao da noite de <strong>${refDisplay || "—"}</strong> fechada depois da meia-noite). Voce pode ajustar antes de confirmar.</p>
+      </div>
       <div class="mt-stack-md grid grid-cols-2 gap-2">
         <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2">
           <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Em aberto</p>
@@ -2754,6 +2810,11 @@ function bindEvents() {
 
   if (refs.reportsDetail && !refs.reportsDetail.dataset.cashCloseDelegate) {
     refs.reportsDetail.dataset.cashCloseDelegate = "1";
+    refs.reportsDetail.addEventListener("change", (e) => {
+      if (e.target.id === "cashCloseReferenceDateInput") {
+        state.cashCloseReferenceDateYmd = e.target.value || "";
+      }
+    });
     refs.reportsDetail.addEventListener("click", (e) => {
       const button = e.target.closest("button");
       if (!button) return;
@@ -2775,17 +2836,29 @@ function bindEvents() {
               renderReports();
               return;
             }
-            if (!state.cashClosePendingClose) {
-              state.cashClosePendingClose = true;
-              state.cashClosePendingRollback = false;
+            const refInput = document.querySelector("#cashCloseReferenceDateInput");
+            if (refInput?.value) state.cashCloseReferenceDateYmd = refInput.value.trim();
+            const refYmd = state.cashCloseReferenceDateYmd || suggestReferenceDateForShift(shift);
+            if (!isValidYmd(refYmd)) {
               state.cashCloseUiMessage = {
-                type: "warn",
-                text: 'Clique novamente em "Confirmar fechamento" para fechar o caixa.'
+                type: "err",
+                text: "Informe o dia de referencia do caixa (campo acima)."
               };
               renderReports();
               return;
             }
-            await persistShiftClose(shift);
+            if (!state.cashClosePendingClose) {
+              state.cashClosePendingClose = true;
+              state.cashClosePendingRollback = false;
+              const refLabel = refYmd.split("-").reverse().join("/");
+              state.cashCloseUiMessage = {
+                type: "warn",
+                text: `Confirmar fechamento do caixa referente a ${refLabel}? Clique novamente em "Confirmar fechamento".`
+              };
+              renderReports();
+              return;
+            }
+            await persistShiftClose(shift, refYmd);
             state.cashClosePendingClose = false;
             state.cashClosePendingRollback = false;
             state.cashCloseUiMessage = { type: "ok", text: "Caixa fechado com sucesso." };

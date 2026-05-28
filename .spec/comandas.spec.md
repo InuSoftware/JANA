@@ -58,8 +58,8 @@ O sistema de comandas é uma aplicação web para gerenciamento de pedidos em es
     *   Itens mais vendidos (products).
     *   Horário de pico (peakHour).
     *   Dia da semana (weekday).
-    *   Fechamento de caixa (cashClose) — operação para fechar o caixa aberto.
-    *   Fechamentos de caixa (shiftCloses) — histórico por sessão (data de referência = dia da abertura; horários reais de abrir/fechar).
+    *   Fechamento de caixa (cashClose) — operação para fechar o caixa aberto; o operador informa **a qual dia o caixa se refere** (data de referência), gravada em `shifts.reference_date` e no snapshot.
+    *   Fechamentos de caixa (shiftCloses) — histórico por sessão (filtro e rótulo pela data de referência escolhida no fechamento; horários reais de abrir/fechar).
 *   **Visualização Detalhada:** Exibe os resultados dos relatórios selecionados.
 *   **Histórico de Fechamentos:** Visualiza fechamentos de caixa anteriores.
 
