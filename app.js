@@ -1543,8 +1543,8 @@ function renderShiftBar() {
   const shift = getOpenShift();
   if (shift) {
     refs.shiftBar.innerHTML = `
-      <div class="rounded-xl border border-primary/30 bg-primary-container/40 px-3 py-2.5">
-        <p class="text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">Caixa aberto</p>
+      <div class="rounded-xl border border-outline-variant bg-primary-fixed px-3 py-2.5">
+        <p class="text-[10px] font-bold uppercase tracking-wide text-on-primary-fixed-variant">Caixa aberto</p>
         <p class="text-sm font-extrabold text-primary">${formatShiftLabel(shift)}</p>
         <p class="mt-0.5 text-[10px] text-on-surface-variant">Vendas entram aqui ate voce fechar o caixa.</p>
       </div>`;
