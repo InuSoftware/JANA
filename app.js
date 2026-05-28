@@ -217,9 +217,11 @@ function loadAllClosedSessions() {
           )
         )
     );
-  return [...fromShifts, ...legacy].sort(
-    (a, b) => new Date(b.endedAt || 0).getTime() - new Date(a.endedAt || 0).getTime()
-  );
+  return [...fromShifts, ...legacy].sort((a, b) => {
+    const refCmp = (b.referenceDate || "").localeCompare(a.referenceDate || "");
+    if (refCmp !== 0) return refCmp;
+    return new Date(b.endedAt || 0).getTime() - new Date(a.endedAt || 0).getTime();
+  });
 }
 
 function loadClosedShiftsFiltered(fromYmd, toYmd) {
@@ -1761,6 +1763,7 @@ function renderDashboard() {
   renderShiftBar();
   const orders = loadOrders();
   const shift = getOpenShift();
+  const dashboardOrders = ordersForDashboard(orders, shift);
   const finalizedInShift = shift ? ordersFinalizedInShift(orders, shift) : [];
   const active = orders.filter((order) => normalizeOrderStatus(order.status) === "Aberta");
   if (refs.dailySalesCount) refs.dailySalesCount.textContent = String(finalizedInShift.length);
@@ -1769,7 +1772,7 @@ function renderDashboard() {
     finalizedInShift.reduce((s, o) => s + (o.totalPaid || 0), 0)
   );
 
-  const filtered = orders.filter((order) => {
+  const filtered = dashboardOrders.filter((order) => {
     if (state.selectedFilter === "all") return true;
     return normalizeOrderStatus(order.status) === state.selectedFilter;
   });
