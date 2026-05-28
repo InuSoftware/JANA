@@ -562,12 +562,12 @@
           <div id="shiftBar" class="mb-stack-md"></div>
           <button type="button" id="openShiftButton"
             class="mb-stack-md hidden h-touch-target-min w-full rounded-xl border border-primary bg-surface-container-low text-sm font-bold text-primary">Abrir
-            turno</button>
+            caixa</button>
           <div class="grid grid-cols-3 gap-2">
             <article
               class="rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-2.5 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
               <p class="text-[10px] font-semibold uppercase leading-tight text-on-surface-variant">Vendas</p>
-              <p class="text-[10px] font-semibold uppercase leading-tight text-on-surface-variant">do turno</p>
+              <p class="text-[10px] font-semibold uppercase leading-tight text-on-surface-variant">deste caixa</p>
               <p id="dailySalesCount" class="mt-1 text-lg font-extrabold leading-none text-primary">0</p>
             </article>
             <article
@@ -639,8 +639,11 @@
               class="report-type-button rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-left text-sm font-semibold text-on-surface shadow-sm transition active:scale-[0.98]"
               data-report="weekday">Dia da semana</button>
             <button type="button"
+              class="report-type-button rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-left text-sm font-semibold text-on-surface shadow-sm transition active:scale-[0.98]"
+              data-report="shiftCloses">Fechamentos de caixa</button>
+            <button type="button"
               class="report-type-button col-span-2 rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-left text-sm font-semibold text-on-surface shadow-sm transition active:scale-[0.98]"
-              data-report="cashClose">Fechamento de caixa</button>
+              data-report="cashClose">Fechar caixa agora</button>
           </div>
           <div id="reportsDetail"
             class="mt-stack-md hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
@@ -733,23 +736,7 @@
               <input id="serviceFeeToggle" type="checkbox"
                 class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
             </label>
-            <p class="mt-3 text-xs font-bold uppercase text-on-surface-variant">Turno operacional</p>
-            <label class="mt-2 block">
-              <span class="mb-1 block text-xs font-semibold text-on-surface">Inicio do turno</span>
-              <input id="shiftStartTimeInput" type="time" value="18:00"
-                class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm">
-            </label>
-            <label class="mt-2 block">
-              <span class="mb-1 block text-xs font-semibold text-on-surface">Fim do turno (dia seguinte se menor)</span>
-              <input id="shiftEndTimeInput" type="time" value="02:00"
-                class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm">
-            </label>
-            <label
-              class="mt-2 flex h-touch-target-min items-center justify-between gap-3 rounded-lg border border-outline-variant px-3">
-              <span class="text-sm font-semibold text-on-surface">Abrir turno automaticamente</span>
-              <input id="shiftAutoOpenToggle" type="checkbox" checked
-                class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
-            </label>
+            <p class="mt-2 text-xs text-on-surface-variant">O caixa abre e fecha quando voce decidir (botao no Inicio e fechamento em Relatorios). Nao ha horario fixo.</p>
           </div>
 
           <div id="categoriesSettingsPanel"

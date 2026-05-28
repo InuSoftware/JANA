@@ -58,7 +58,8 @@ O sistema de comandas é uma aplicação web para gerenciamento de pedidos em es
     *   Itens mais vendidos (products).
     *   Horário de pico (peakHour).
     *   Dia da semana (weekday).
-    *   Fechamento de caixa (cashClose).
+    *   Fechamento de caixa (cashClose) — operação para fechar o caixa aberto.
+    *   Fechamentos de caixa (shiftCloses) — histórico por sessão (data de referência = dia da abertura; horários reais de abrir/fechar).
 *   **Visualização Detalhada:** Exibe os resultados dos relatórios selecionados.
 *   **Histórico de Fechamentos:** Visualiza fechamentos de caixa anteriores.
 
@@ -126,7 +127,7 @@ Persistência em PostgreSQL via Supabase Auth + PostgREST. Cada usuário autenti
         *   `paymentMethods`: Array de Strings.
         *   `itemsCount`: Number (total de itens na comanda).
         *   `closedAt`: String (ISO 8601 timestamp).
-*   **`shifts`**: Turnos operacionais (ex.: referência 26/05, janela 18h–02h).
+*   **`shifts`**: Sessões de caixa (abertura e fechamento manuais, sem horário fixo).
     *   `id`: UUID.
     *   `reference_date`: Data de referência do turno (rótulo operacional).
     *   `scheduled_start` / `scheduled_end`: Horários configurados (`time`).
@@ -136,7 +137,6 @@ Persistência em PostgreSQL via Supabase Auth + PostgREST. Cada usuário autenti
     *   `payload.closeSnapshot`: Resumo ao fechar (vendas, bruto, comandas em aberto).
 *   **`commandas.shift_id`**: Comanda finalizada vinculada ao turno.
 *   **`app_config`**: Configurações do app (um documento JSON por usuário, chave `user_id`).
-    *   `shiftStartTime`, `shiftEndTime`, `shiftAutoOpen`: Horário e abertura automática do turno.
     *   `id` (no payload): Number (`1`), referência legada no JSON interno.
     *   `useTables`: Boolean.
     *   `useServiceFee`: Boolean.

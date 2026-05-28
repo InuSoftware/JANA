@@ -6,7 +6,8 @@
 2. No **SQL Editor**, execute os arquivos nesta ordem:
    - [supabase/migrations/001_initial_schema.sql](supabase/migrations/001_initial_schema.sql)
    - [supabase/migrations/002_api_grants.sql](supabase/migrations/002_api_grants.sql)
-   - [supabase/migrations/003_shifts.sql](supabase/migrations/003_shifts.sql) — turnos operacionais e `commandas.shift_id`
+   - [supabase/migrations/003_shifts.sql](supabase/migrations/003_shifts.sql) — sessões de caixa e `commandas.shift_id`
+   - (opcional) [supabase/migrations/004_migrate_daily_closes_to_shifts.sql](supabase/migrations/004_migrate_daily_closes_to_shifts.sql) — copia os fechamentos antigos de `daily_closes` para `shifts` (mesmos ids). O app já mostra `daily_closes` no histórico e no relatório **Fechamentos de caixa** mesmo sem rodar o 004.
 3. Se as rotas da API retornarem **403** depois de criar tabelas novas, rode `002_api_grants.sql` novamente.
 
 ### Schema Fase A (PK `uuid`)
