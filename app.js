@@ -66,7 +66,10 @@ function defaultConfigPayload() {
       { id: "cash", name: "Dinheiro", active: true },
       { id: "pix", name: "PIX", active: true },
       { id: "voucher", name: "Vale Ref.", active: true }
-    ]
+    ],
+    shiftStartTime: "18:00",
+    shiftEndTime: "02:00",
+    shiftAutoOpen: true
   };
 }
 
@@ -107,6 +110,189 @@ function toIsoTimestamptz(value) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+const DEFAULT_SHIFT_START = "18:00";
+const DEFAULT_SHIFT_END = "02:00";
+
+function getShiftSchedule(config) {
+  const c = config || state.config || {};
+  const start = String(c.shiftStartTime || DEFAULT_SHIFT_START).trim().slice(0, 5);
+  const end = String(c.shiftEndTime || DEFAULT_SHIFT_END).trim().slice(0, 5);
+  return {
+    shiftStartTime: /^\d{2}:\d{2}$/.test(start) ? start : DEFAULT_SHIFT_START,
+    shiftEndTime: /^\d{2}:\d{2}$/.test(end) ? end : DEFAULT_SHIFT_END,
+    shiftAutoOpen: c.shiftAutoOpen !== false
+  };
+}
+
+function parseHmToMinutes(hm) {
+  const [h, m] = String(hm || "0:0").split(":").map((n) => parseInt(n, 10));
+  return (h || 0) * 60 + (m || 0);
+}
+
+function todayLocalYmdFromDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function localDateFromYmd(ymd) {
+  const [y, m, day] = String(ymd).slice(0, 10).split("-").map((n) => parseInt(n, 10));
+  return new Date(y, m - 1, day);
+}
+
+function combineYmdAndHm(ymd, hm) {
+  const d = localDateFromYmd(ymd);
+  const [hh, mm] = String(hm).slice(0, 5).split(":").map((n) => parseInt(n, 10));
+  d.setHours(hh || 0, mm || 0, 0, 0);
+  return d;
+}
+
+function postgresTimeFromHm(hm) {
+  const s = String(hm).trim().slice(0, 5);
+  return s.length === 5 ? `${s}:00` : "18:00:00";
+}
+
+/** Data de referencia do turno (ex.: madrugada de 27/05 ainda e turno do dia 26). */
+function getOperationalReferenceDate(now, config) {
+  const { shiftStartTime, shiftEndTime } = getShiftSchedule(config);
+  const startM = parseHmToMinutes(shiftStartTime);
+  const endM = parseHmToMinutes(shiftEndTime);
+  const nowM = now.getHours() * 60 + now.getMinutes();
+  const ymd = todayLocalYmdFromDate(now);
+  if (endM <= startM) {
+    if (nowM >= startM) return ymd;
+    if (nowM < endM) {
+      const prev = new Date(now);
+      prev.setDate(prev.getDate() - 1);
+      return todayLocalYmdFromDate(prev);
+    }
+    return null;
+  }
+  if (nowM >= startM && nowM < endM) return ymd;
+  return null;
+}
+
+function getShiftWindowBounds(referenceDateYmd, startTime, endTime) {
+  const windowStart = combineYmdAndHm(referenceDateYmd, startTime);
+  let windowEnd = combineYmdAndHm(referenceDateYmd, endTime);
+  if (windowEnd.getTime() <= windowStart.getTime()) {
+    windowEnd = new Date(windowEnd);
+    windowEnd.setDate(windowEnd.getDate() + 1);
+  }
+  return {
+    windowStartAt: windowStart.toISOString(),
+    windowEndAt: windowEnd.toISOString()
+  };
+}
+
+function shiftRowToApp(row) {
+  const ref =
+    row.reference_date != null
+      ? typeof row.reference_date === "string"
+        ? row.reference_date.slice(0, 10)
+        : String(row.reference_date).slice(0, 10)
+      : "";
+  const schedStart = row.scheduled_start != null ? String(row.scheduled_start).slice(0, 5) : DEFAULT_SHIFT_START;
+  const schedEnd = row.scheduled_end != null ? String(row.scheduled_end).slice(0, 5) : DEFAULT_SHIFT_END;
+  return {
+    id: row.id,
+    referenceDate: ref,
+    scheduledStart: schedStart,
+    scheduledEnd: schedEnd,
+    windowStartAt: row.window_start_at,
+    windowEndAt: row.window_end_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    status: row.status === "fechado" ? "fechado" : "aberto",
+    payload: row.payload && typeof row.payload === "object" ? row.payload : {}
+  };
+}
+
+function loadShifts() {
+  return state.cache.shifts || [];
+}
+
+function getOpenShift() {
+  return loadShifts().find((s) => s.status === "aberto") || null;
+}
+
+function formatShiftLabel(shift) {
+  if (!shift) return "";
+  const ref = shift.referenceDate ? shift.referenceDate.split("-").reverse().join("/") : "";
+  return `Turno ${ref} · ${shift.scheduledStart}–${shift.scheduledEnd}`;
+}
+
+function formatShiftWindowHint(shift) {
+  if (!shift) return "";
+  const a = new Date(shift.windowStartAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const b = new Date(shift.windowEndAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return `${a} → ${b}`;
+}
+
+function orderBelongsToShift(order, shift) {
+  if (!shift || normalizeOrderStatus(order.status) !== "Finalizado") return false;
+  if (order.shiftId && String(order.shiftId) === String(shift.id)) return true;
+  const closedIso = order.closedAt || order.createdAt;
+  if (!closedIso) return false;
+  const t = new Date(closedIso).getTime();
+  const winStart = new Date(shift.windowStartAt).getTime();
+  const winEnd = new Date(shift.windowEndAt).getTime();
+  const shiftStart = new Date(shift.startedAt).getTime();
+  const shiftEnd =
+    shift.status === "fechado" && shift.endedAt
+      ? new Date(shift.endedAt).getTime()
+      : Math.min(Date.now(), winEnd);
+  const from = Math.max(winStart, shiftStart);
+  return t >= from && t <= shiftEnd;
+}
+
+function ordersFinalizedInShift(orders, shift) {
+  if (!shift) return [];
+  return orders.filter((o) => orderBelongsToShift(o, shift));
+}
+
+function ordersForDashboard(orders, shift) {
+  const open = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+  if (!shift) return open;
+  const finalized = ordersFinalizedInShift(orders, shift);
+  const seen = new Set();
+  return [...open, ...finalized].filter((o) => {
+    const k = String(o.id);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+function computeCashCloseDraft(shift) {
+  if (!shift) {
+    return {
+      shiftId: null,
+      referenceDate: "",
+      activeOrdersCount: 0,
+      totalBruto: 0,
+      finalizedOrdersCount: 0,
+      sales: []
+    };
+  }
+  const orders = loadOrders();
+  const slice = ordersFinalizedInShift(orders, shift);
+  const activeOrdersCount = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta").length;
+  return {
+    shiftId: shift.id,
+    referenceDate: shift.referenceDate,
+    activeOrdersCount,
+    totalBruto: slice.reduce((s, o) => s + (o.totalPaid || 0), 0),
+    finalizedOrdersCount: slice.length,
+    sales: slice.map((order) => ({
+      orderId: order.id,
+      customer: (order.customer || "").trim() || "Cliente sem nome",
+      totalPaid: order.totalPaid || 0,
+      paymentMethods: Array.isArray(order.paymentMethods) ? order.paymentMethods : [],
+      itemsCount: (order.items || []).reduce((sum, item) => sum + (item.qty || 0), 0),
+      closedAt: order.closedAt || order.createdAt || null
+    }))
+  };
+}
+
 async function ensureProfile(session, supabase) {
   const { data } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
   if (data) return;
@@ -132,9 +318,10 @@ async function bootstrapFromSupabase(session) {
   }
   await ensureProfile(session, supabase);
 
-  const [pRes, cRes, dRes, cfgRes, profRes] = await Promise.all([
+  const [pRes, cRes, sRes, dRes, cfgRes, profRes] = await Promise.all([
     supabase.from("products").select("*"),
-    supabase.from("commandas").select("id, payload, status, created_at, updated_at, closed_at"),
+    supabase.from("commandas").select("id, payload, status, created_at, updated_at, closed_at, shift_id"),
+    supabase.from("shifts").select("*").order("started_at", { ascending: false }),
     supabase.from("daily_closes").select("id, payload, closed_at, date_ymd"),
     supabase.from("app_config").select("payload").maybeSingle(),
     supabase.from("profiles").select("display_name, role").eq("id", session.user.id).maybeSingle()
@@ -142,6 +329,7 @@ async function bootstrapFromSupabase(session) {
 
   if (pRes.error) throw pRes.error;
   if (cRes.error) throw cRes.error;
+  if (sRes.error) throw sRes.error;
   if (dRes.error) throw dRes.error;
   if (cfgRes.error) throw cfgRes.error;
   if (profRes.error) throw profRes.error;
@@ -152,8 +340,10 @@ async function bootstrapFromSupabase(session) {
     if (r.status != null && r.status !== "") base.status = r.status;
     if (r.closed_at != null) base.closedAt = r.closed_at;
     if (r.created_at != null) base.createdAt = r.created_at;
+    if (r.shift_id != null) base.shiftId = r.shift_id;
     return base;
   });
+  state.cache.shifts = (sRes.data || []).map(shiftRowToApp);
   state.cache.dailyCloses = (dRes.data || []).map((r) => {
     const p = r.payload || {};
     let dateYmd = p.dateYmd;
@@ -189,6 +379,9 @@ async function bootstrapFromSupabase(session) {
     username: pr?.display_name || session.user.email?.split("@")[0] || "Usuario",
     role: pr?.role || "Atendente"
   });
+
+  state.config = loadConfig();
+  await ensureOpenShift();
 }
 
 /** Carrega dados e UI após sessão válida (reload com sessão ou login explícito). */
@@ -242,7 +435,8 @@ async function upsertCommandaRemote(order) {
     payload: commandaPayloadDocument(order),
     status: order.status || "Aberta",
     closed_at: toIsoTimestamptz(order.closedAt),
-    created_at: createdRaw
+    created_at: createdRaw,
+    shift_id: order.shiftId || null
   };
   const { error } = await sb.from("commandas").upsert(row);
   if (error) throw error;
@@ -290,6 +484,106 @@ async function deleteDailyCloseRemote(closeId) {
   if (error) throw error;
 }
 
+async function insertShiftRemote(shift) {
+  const sb = await getSupabase();
+  if (!sb) throw new Error("Supabase indisponivel");
+  const sched = getShiftSchedule(state.config);
+  const bounds = getShiftWindowBounds(shift.referenceDate, sched.shiftStartTime, sched.shiftEndTime);
+  const { data, error } = await sb
+    .from("shifts")
+    .insert({
+      reference_date: shift.referenceDate,
+      scheduled_start: postgresTimeFromHm(sched.shiftStartTime),
+      scheduled_end: postgresTimeFromHm(sched.shiftEndTime),
+      window_start_at: bounds.windowStartAt,
+      window_end_at: bounds.windowEndAt,
+      started_at: shift.startedAt || new Date().toISOString(),
+      status: "aberto",
+      payload: {}
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return shiftRowToApp(data);
+}
+
+async function closeShiftRemote(shift, closePayload) {
+  const sb = await getSupabase();
+  if (!sb) throw new Error("Supabase indisponivel");
+  const endedAt = new Date().toISOString();
+  const { data, error } = await sb
+    .from("shifts")
+    .update({
+      status: "fechado",
+      ended_at: endedAt,
+      payload: { closeSnapshot: closePayload, closedAt: endedAt }
+    })
+    .eq("id", String(shift.id))
+    .select("*")
+    .single();
+  if (error) throw error;
+  return shiftRowToApp(data);
+}
+
+async function reopenShiftRemote(shiftId) {
+  const sb = await getSupabase();
+  if (!sb) throw new Error("Supabase indisponivel");
+  const { data, error } = await sb
+    .from("shifts")
+    .update({ status: "aberto", ended_at: null, payload: {} })
+    .eq("id", String(shiftId))
+    .select("*")
+    .single();
+  if (error) throw error;
+  return shiftRowToApp(data);
+}
+
+async function openShiftManual() {
+  if (getOpenShift()) throw new Error("Ja existe um turno aberto.");
+  const sched = getShiftSchedule(state.config);
+  const ref = getOperationalReferenceDate(new Date(), state.config) || todayLocalYmd();
+  const created = await insertShiftRemote({
+    referenceDate: ref,
+    startedAt: new Date().toISOString()
+  });
+  state.cache.shifts = [created, ...loadShifts().filter((s) => String(s.id) !== String(created.id))];
+  return created;
+}
+
+async function ensureOpenShift() {
+  if (getOpenShift()) return getOpenShift();
+  const sched = getShiftSchedule(state.config);
+  if (!sched.shiftAutoOpen) return null;
+  const ref = getOperationalReferenceDate(new Date(), state.config);
+  if (!ref) return null;
+  try {
+    return await openShiftManual();
+  } catch (e) {
+    console.warn("[JANA] ensureOpenShift", e);
+    return null;
+  }
+}
+
+async function persistShiftClose(shift) {
+  const draft = computeCashCloseDraft(shift);
+  const closed = await closeShiftRemote(shift, draft);
+  const list = loadShifts().map((s) => (String(s.id) === String(closed.id) ? closed : s));
+  state.cache.shifts = list;
+  return closed;
+}
+
+async function rollbackLastClosedShift() {
+  const closed = loadShifts()
+    .filter((s) => s.status === "fechado" && s.endedAt)
+    .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime());
+  if (!closed.length) return false;
+  if (getOpenShift()) throw new Error("Feche o turno aberto antes de estornar outro.");
+  const target = closed[0];
+  const reopened = await reopenShiftRemote(target.id);
+  state.cache.shifts = loadShifts().map((s) => (String(s.id) === String(reopened.id) ? reopened : s));
+  return true;
+}
+
 const PENDING_ORDER_ID = "__pending__";
 let _pendingOrderPostChain = Promise.resolve();
 /** Botao Adicionar item: estado de pressao para feedback visual. */
@@ -315,13 +609,11 @@ const state = {
   currentView: "main",
   pendingNewOrder: null,
   selectedReport: null,
-  dashboardDateYmd: "",
   reportDateFrom: "",
   reportDateTo: "",
-  cashCloseDateYmd: "",
   cashCloseUiMessage: null,
-  cashClosePendingSaveYmd: null,
-  cashClosePendingRollbackYmd: null,
+  cashClosePendingClose: false,
+  cashClosePendingRollback: false,
   cashCloseHistoryExpandedId: null,
   config: {
     id: 1,
@@ -354,7 +646,8 @@ const state = {
         { id: "voucher", name: "Vale Ref.", active: true }
       ]
     },
-    dailyCloses: []
+    dailyCloses: [],
+    shifts: []
   }
 };
 
@@ -362,6 +655,7 @@ function clearDataCache() {
   state.cache.products = [];
   state.cache.commandas = [];
   state.cache.dailyCloses = [];
+  state.cache.shifts = [];
   state.cache.config = defaultConfigPayload();
 }
 
@@ -379,7 +673,11 @@ const refs = {
   currentUserLabel: document.querySelector("#currentUserLabel"),
   openSettingsButton: document.querySelector("#openSettingsButton"),
   logoutButton: document.querySelector("#logoutButton"),
-  dashboardDateInput: document.querySelector("#dashboardDateInput"),
+  shiftBar: document.querySelector("#shiftBar"),
+  openShiftButton: document.querySelector("#openShiftButton"),
+  shiftStartTimeInput: document.querySelector("#shiftStartTimeInput"),
+  shiftEndTimeInput: document.querySelector("#shiftEndTimeInput"),
+  shiftAutoOpenToggle: document.querySelector("#shiftAutoOpenToggle"),
   dailySalesCount: document.querySelector("#dailySalesCount"),
   activeOrdersCount: document.querySelector("#activeOrdersCount"),
   dailyRevenueValue: document.querySelector("#dailyRevenueValue"),
@@ -540,99 +838,32 @@ function saveOrders(orders) {
   })();
 }
 
-function loadDailyCloses() {
-  return state.cache.dailyCloses || [];
-}
-
-function getLastDailyCloseIso(dateYmd) {
-  const list = loadDailyCloses().filter((entry) => String(entry.dateYmd) === String(dateYmd) && entry.closedAt);
-  if (!list.length) return null;
-  return list
-    .map((entry) => entry.closedAt)
-    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
-}
-
-/** Valores como no painel Inicio: comandas abertas (so no dia corrente) + total bruto do dia (finalizadas na data). */
-function computeCashCloseDraft(dateYmd) {
-  const orders = loadOrders();
-  const today = todayLocalYmd();
-  const lastCloseIso = getLastDailyCloseIso(dateYmd);
-  const slice = finalizedOrdersInLocalDateRange(orders, dateYmd, dateYmd).filter((order) => {
-    if (!lastCloseIso) return true;
-    const closeIso = order.closedAt || order.createdAt;
-    if (!closeIso) return false;
-    return new Date(closeIso).getTime() > new Date(lastCloseIso).getTime();
-  });
-  const totalBruto = slice.reduce((s, o) => s + (o.totalPaid || 0), 0);
-  const finalizedOrdersCount = slice.length;
-  const sales = slice.map((order) => ({
-    orderId: order.id,
-    customer: (order.customer || "").trim() || "Cliente sem nome",
-    totalPaid: order.totalPaid || 0,
-    paymentMethods: Array.isArray(order.paymentMethods) ? order.paymentMethods : [],
-    itemsCount: (order.items || []).reduce((sum, item) => sum + (item.qty || 0), 0),
-    closedAt: order.closedAt || order.createdAt || null
-  }));
-  const activeOrdersCount =
-    dateYmd === today ? orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta").length : null;
-  return { dateYmd, activeOrdersCount, totalBruto, finalizedOrdersCount, sales };
-}
-
-async function persistDailyClose(draft) {
-  const list = [...loadDailyCloses()];
-  const closedAt = new Date().toISOString();
-  const payload = {
-    dateYmd: draft.dateYmd,
-    closedAt,
-    activeOrdersCount: draft.activeOrdersCount,
-    totalBruto: draft.totalBruto,
-    finalizedOrdersCount: draft.finalizedOrdersCount,
-    sales: Array.isArray(draft.sales) ? draft.sales : []
-  };
-  const id = crypto.randomUUID();
-  const saved = { ...payload, id };
-  await insertDailyCloseRemote(id, saved);
-  list.unshift(saved);
-  state.cache.dailyCloses = list;
-}
-
-async function rollbackLastDailyClose(dateYmd) {
-  const list = [...loadDailyCloses()];
-  const target = list
-    .filter((entry) => String(entry.dateYmd) === String(dateYmd) && entry.id != null && entry.id !== "")
-    .sort(
-      (a, b) =>
-        new Date(b.closedAt || `${b.dateYmd || ""}T00:00:00`).getTime() -
-        new Date(a.closedAt || `${a.dateYmd || ""}T00:00:00`).getTime()
-    )[0];
-  if (!target) return false;
-  await deleteDailyCloseRemote(target.id);
-  state.cache.dailyCloses = list.filter((entry) => String(entry.id) !== String(target.id));
-  return true;
+function loadClosedShiftsForHistory() {
+  return loadShifts()
+    .filter((s) => s.status === "fechado")
+    .sort((a, b) => new Date(b.endedAt || 0).getTime() - new Date(a.endedAt || 0).getTime());
 }
 
 function renderCashCloseHistoryOverlay() {
   if (!refs.cashCloseHistoryBody) return;
-  const history = [...loadDailyCloses()].sort(
-    (a, b) =>
-      new Date(b.closedAt || `${b.dateYmd || ""}T00:00:00`).getTime() -
-      new Date(a.closedAt || `${a.dateYmd || ""}T00:00:00`).getTime()
-  );
+  const history = loadClosedShiftsForHistory();
   refs.cashCloseHistoryBody.innerHTML = history.length
     ? `<ul class="space-y-2">
         ${history
           .map((row) => {
-            const sales = Array.isArray(row.sales) ? row.sales : [];
-            const rowId = String(row.id || `${row.dateYmd || ""}-${row.closedAt || ""}`);
+            const snap = row.payload?.closeSnapshot || {};
+            const sales = Array.isArray(snap.sales) ? snap.sales : [];
+            const rowId = String(row.id);
             const isExpanded = state.cashCloseHistoryExpandedId === rowId;
+            const refLabel = row.referenceDate ? row.referenceDate.split("-").reverse().join("/") : "";
             return `
           <li class="rounded-lg border border-outline-variant px-3 py-2 text-xs">
             <button type="button" class="cash-close-history-toggle w-full text-left" data-close-id="${rowId}">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
-                  <p class="font-semibold text-on-surface">${row.dateYmd}</p>
-                  <p class="text-on-surface-variant">Ativas: ${row.activeOrdersCount != null ? row.activeOrdersCount : "—"} • Bruto: ${formatCurrency(row.totalBruto || 0)} • ${row.finalizedOrdersCount ?? 0} fin.</p>
-                  <p class="text-[10px] text-on-surface-variant">${row.closedAt ? new Date(row.closedAt).toLocaleString("pt-BR") : ""}</p>
+                  <p class="font-semibold text-on-surface">Turno ${refLabel} · ${row.scheduledStart}–${row.scheduledEnd}</p>
+                  <p class="text-on-surface-variant">Ativas: ${snap.activeOrdersCount != null ? snap.activeOrdersCount : "—"} • Bruto: ${formatCurrency(snap.totalBruto || 0)} • ${snap.finalizedOrdersCount ?? 0} fin.</p>
+                  <p class="text-[10px] text-on-surface-variant">${row.endedAt ? new Date(row.endedAt).toLocaleString("pt-BR") : ""}</p>
                 </div>
                 <span class="text-[10px] font-bold uppercase ${isExpanded ? "text-primary" : "text-on-surface-variant"}">${isExpanded ? "Ocultar" : "Ver"}</span>
               </div>
@@ -689,12 +920,17 @@ function loadConfig() {
       { id: "cash", name: "Dinheiro", active: true },
       { id: "pix", name: "PIX", active: true },
       { id: "voucher", name: "Vale Ref.", active: true }
-    ]
+    ],
+    shiftStartTime: DEFAULT_SHIFT_START,
+    shiftEndTime: DEFAULT_SHIFT_END,
+    shiftAutoOpen: true
   };
   const config = state.cache.config || fallback;
+  const sched = getShiftSchedule(config);
   return {
     ...fallback,
     ...config,
+    ...sched,
     activeTheme: THEME_PRESETS[config.activeTheme] ? config.activeTheme : fallback.activeTheme,
     categories: Array.isArray(config.categories) && config.categories.length ? config.categories : fallback.categories,
     prepCategories: Array.isArray(config.prepCategories) ? config.prepCategories : fallback.prepCategories,
@@ -756,20 +992,6 @@ function getCurrentOrder() {
 function calculateOrderSubtotal(order) {
   const items = order.items || [];
   return items.reduce((sum, item) => sum + item.price * item.qty, 0);
-}
-
-function calculatePaidToday(orders) {
-  const today = todayLocalYmd();
-  const lastCloseIso = getLastDailyCloseIso(today);
-  return orders
-    .filter((order) => {
-      if (normalizeOrderStatus(order.status) !== "Finalizado") return false;
-      const closedIso = order.closedAt || order.createdAt;
-      if (localYmdFromIso(closedIso) !== today) return false;
-      if (!lastCloseIso) return true;
-      return new Date(closedIso).getTime() > new Date(lastCloseIso).getTime();
-    })
-    .reduce((sum, order) => sum + (order.totalPaid || 0), 0);
 }
 
 /** Soma totalPaid de comandas finalizadas com closedAt na faixa de datas locais [fromYmd, toYmd] inclusive. */
@@ -1050,6 +1272,7 @@ function performReopenOrder(orderId) {
   target.status = "Aberta";
   delete target.closedAt;
   delete target.canceledAt;
+  delete target.shiftId;
   if (st === "Finalizado") {
     target.totalPaid = 0;
     target.paymentMethods = [];
@@ -1188,26 +1411,42 @@ function renderAuth() {
   }
 }
 
-function renderDashboard() {
-  const orders = loadOrders();
-  const today = todayLocalYmd();
-  const refYmd = state.dashboardDateYmd || today;
-  if (refs.dashboardDateInput && refs.dashboardDateInput.value !== refYmd) {
-    refs.dashboardDateInput.value = refYmd;
+function renderShiftBar() {
+  if (!refs.shiftBar) return;
+  const shift = getOpenShift();
+  const sched = getShiftSchedule(state.config);
+  if (shift) {
+    refs.shiftBar.innerHTML = `
+      <div class="rounded-xl border border-primary/30 bg-primary-container/40 px-3 py-2.5">
+        <p class="text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">Turno em andamento</p>
+        <p class="text-sm font-extrabold text-primary">${formatShiftLabel(shift)}</p>
+        <p class="mt-0.5 text-[10px] text-on-surface-variant">${formatShiftWindowHint(shift)}</p>
+      </div>`;
+    if (refs.openShiftButton) refs.openShiftButton.classList.add("hidden");
+  } else {
+    const refHint = getOperationalReferenceDate(new Date(), state.config);
+    refs.shiftBar.innerHTML = `
+      <div class="rounded-xl border border-outline-variant bg-surface-container-low px-3 py-2.5">
+        <p class="text-sm font-semibold text-on-surface">Nenhum turno aberto</p>
+        <p class="mt-0.5 text-[10px] text-on-surface-variant">Horario configurado: ${sched.shiftStartTime} – ${sched.shiftEndTime}${refHint ? ` · referencia hoje: ${refHint.split("-").reverse().join("/")}` : " · fora do horario de turno"}</p>
+      </div>`;
+    if (refs.openShiftButton) refs.openShiftButton.classList.remove("hidden");
   }
-  const orderDashboardYmd = (order) => {
-    const st = normalizeOrderStatus(order.status);
-    if (st === "Finalizado") return localYmdFromIso(order.closedAt || order.createdAt);
-    if (st === "Cancelada") return localYmdFromIso(order.canceledAt || order.createdAt);
-    return localYmdFromIso(order.createdAt);
-  };
-  const scopedOrders = orders.filter((order) => orderDashboardYmd(order) === refYmd);
-  const dailyFinalizedOrders = finalizedOrdersInLocalDateRange(orders, refYmd, refYmd);
-  const active = scopedOrders.filter((order) => normalizeOrderStatus(order.status) === "Aberta");
+}
 
-  if (refs.dailySalesCount) refs.dailySalesCount.textContent = String(dailyFinalizedOrders.length);
+function renderDashboard() {
+  renderShiftBar();
+  const orders = loadOrders();
+  const shift = getOpenShift();
+  const finalizedInShift = shift ? ordersFinalizedInShift(orders, shift) : [];
+  const active = orders.filter((order) => normalizeOrderStatus(order.status) === "Aberta");
+  const scopedOrders = ordersForDashboard(orders, shift);
+
+  if (refs.dailySalesCount) refs.dailySalesCount.textContent = String(finalizedInShift.length);
   refs.activeOrdersCount.textContent = String(active.length);
-  refs.dailyRevenueValue.textContent = formatCurrency(calculatePaidInDateRange(orders, refYmd, refYmd));
+  refs.dailyRevenueValue.textContent = formatCurrency(
+    finalizedInShift.reduce((s, o) => s + (o.totalPaid || 0), 0)
+  );
 
   const filtered = scopedOrders.filter((order) => {
     if (state.selectedFilter === "all") return true;
@@ -1316,6 +1555,10 @@ function renderSettings() {
   refs.tableModeToggle.checked = !!state.config.useTables;
   refs.serviceFeeToggle.checked = !!state.config.useServiceFee;
   refs.serviceFeeField?.classList.toggle("hidden", !state.config.useServiceFee);
+  const sched = getShiftSchedule(state.config);
+  if (refs.shiftStartTimeInput) refs.shiftStartTimeInput.value = sched.shiftStartTime;
+  if (refs.shiftEndTimeInput) refs.shiftEndTimeInput.value = sched.shiftEndTime;
+  if (refs.shiftAutoOpenToggle) refs.shiftAutoOpenToggle.checked = sched.shiftAutoOpen;
   renderProductCategoryOptions();
 
   refs.categoriesList.innerHTML = (state.config.categories || [])
@@ -1816,36 +2059,36 @@ function renderReports() {
   } else if (state.selectedReport === "cashClose") {
     const uiMsg = state.cashCloseUiMessage;
     state.cashCloseUiMessage = null;
-    const refYmd = state.cashCloseDateYmd || today;
-    const savePending = state.cashClosePendingSaveYmd === refYmd;
-    const rollbackPending = state.cashClosePendingRollbackYmd === refYmd;
-    const draft = computeCashCloseDraft(refYmd);
-    const ativasLabel =
-      draft.activeOrdersCount != null ? String(draft.activeOrdersCount) : "— (so no dia de hoje)";
-    body = `
-      <p class="text-xs text-on-surface-variant">Registra o mesmo resumo do Inicio para a data escolhida: comandas <strong>abertas</strong> (somente se a data for hoje) e <strong>total bruto</strong> (somente das comandas finalizadas desde o ultimo fechamento dessa data).</p>
-      <label class="mt-3 block">
-        <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Data de referencia</span>
-        <input id="cashCloseDateInput" type="date" class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm" value="${refYmd}">
-      </label>
+    const shift = getOpenShift();
+    const savePending = state.cashClosePendingClose;
+    const rollbackPending = state.cashClosePendingRollback;
+    const draft = computeCashCloseDraft(shift);
+    if (!shift) {
+      body = `
+        <p class="text-sm text-on-surface-variant">Nao ha turno aberto. Abra um turno no Inicio antes de fechar o caixa.</p>
+        <button type="button" id="openCashCloseHistoryButton" class="mt-3 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Ver historico de turnos fechados</button>`;
+    } else {
+      body = `
+      <p class="text-xs text-on-surface-variant">Fecha o <strong>turno atual</strong> (${formatShiftLabel(shift)}). Inclui todas as comandas finalizadas neste turno, mesmo apos a meia-noite.</p>
+      <p class="mt-1 text-[10px] text-on-surface-variant">${formatShiftWindowHint(shift)}</p>
       <div class="mt-stack-md grid grid-cols-2 gap-2">
         <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2">
           <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Em aberto</p>
-          <p class="text-xl font-extrabold text-primary">${ativasLabel}</p>
+          <p class="text-xl font-extrabold text-primary">${draft.activeOrdersCount}</p>
         </div>
         <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2">
           <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Total bruto</p>
           <p class="text-xl font-extrabold text-secondary">${formatCurrency(draft.totalBruto)}</p>
         </div>
       </div>
-      <p class="mt-2 text-xs text-on-surface-variant">${draft.finalizedOrdersCount} comanda(s) finalizada(s) no periodo deste fechamento.</p>
+      <p class="mt-2 text-xs text-on-surface-variant">${draft.finalizedOrdersCount} comanda(s) finalizada(s) neste turno.</p>
       <div class="mt-stack-md grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <button type="button" id="saveCashCloseButton" class="h-touch-target-min w-full rounded-xl text-sm font-bold ${savePending ? "bg-secondary text-on-secondary" : "bg-primary text-on-primary"}">${savePending ? "Confirmar salvamento" : "Salvar fechamento"}</button>
-        <button type="button" id="rollbackCashCloseButton" class="h-touch-target-min w-full rounded-xl border text-sm font-bold ${rollbackPending ? "border-error bg-error text-on-error" : "border-outline-variant bg-surface-container-low text-on-surface"}">${rollbackPending ? "Confirmar estorno" : "Estornar ultimo fechamento"}</button>
+        <button type="button" id="saveCashCloseButton" class="h-touch-target-min w-full rounded-xl text-sm font-bold ${savePending ? "bg-secondary text-on-secondary" : "bg-primary text-on-primary"}">${savePending ? "Confirmar fechamento" : "Fechar turno"}</button>
+        <button type="button" id="rollbackCashCloseButton" class="h-touch-target-min w-full rounded-xl border text-sm font-bold ${rollbackPending ? "border-error bg-error text-on-error" : "border-outline-variant bg-surface-container-low text-on-surface"}">${rollbackPending ? "Confirmar estorno" : "Reabrir ultimo turno fechado"}</button>
       </div>
-      <button type="button" id="openCashCloseHistoryButton" class="mt-2 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Ver historico de fechamentos</button>
-      <p id="cashCloseFeedback" class="mt-2 min-h-[1rem] text-xs ${uiMsg?.type === "err" ? "text-error" : uiMsg?.type === "ok" ? "text-secondary" : uiMsg?.type === "warn" ? "text-primary" : "text-on-surface-variant"}">${uiMsg?.text || ""}</p>
-    `;
+      <button type="button" id="openCashCloseHistoryButton" class="mt-2 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Ver historico de turnos fechados</button>
+      <p id="cashCloseFeedback" class="mt-2 min-h-[1rem] text-xs ${uiMsg?.type === "err" ? "text-error" : uiMsg?.type === "ok" ? "text-secondary" : uiMsg?.type === "warn" ? "text-primary" : "text-on-surface-variant"}">${uiMsg?.text || ""}</p>`;
+    }
   } else {
     body = "<p class='text-sm text-on-surface-variant'>Selecione um tipo na lista.</p>";
   }
@@ -2235,10 +2478,32 @@ function bindEvents() {
       renderDashboard();
     });
   });
-  refs.dashboardDateInput?.addEventListener("change", () => {
-    state.dashboardDateYmd = refs.dashboardDateInput.value || todayLocalYmd();
-    renderDashboard();
+  refs.openShiftButton?.addEventListener("click", () => {
+    void (async () => {
+      try {
+        await openShiftManual();
+        state.cashCloseUiMessage = { type: "ok", text: "Turno aberto." };
+        renderAll();
+      } catch (e) {
+        console.error(e);
+        state.cashCloseUiMessage = {
+          type: "err",
+          text: (e && e.message) || "Nao foi possivel abrir o turno."
+        };
+        renderDashboard();
+      }
+    })();
   });
+
+  const persistShiftScheduleFromInputs = () => {
+    if (refs.shiftStartTimeInput) state.config.shiftStartTime = refs.shiftStartTimeInput.value || DEFAULT_SHIFT_START;
+    if (refs.shiftEndTimeInput) state.config.shiftEndTime = refs.shiftEndTimeInput.value || DEFAULT_SHIFT_END;
+    if (refs.shiftAutoOpenToggle) state.config.shiftAutoOpen = refs.shiftAutoOpenToggle.checked;
+    saveConfig(state.config);
+  };
+  refs.shiftStartTimeInput?.addEventListener("change", persistShiftScheduleFromInputs);
+  refs.shiftEndTimeInput?.addEventListener("change", persistShiftScheduleFromInputs);
+  refs.shiftAutoOpenToggle?.addEventListener("change", persistShiftScheduleFromInputs);
 
   refs.newOrderButton.addEventListener("click", createNewOrderAndOpen);
   refs.closeOrderDialogButton.addEventListener("click", () => refs.orderDialog.close());
@@ -2274,13 +2539,6 @@ function bindEvents() {
 
   if (refs.reportsDetail && !refs.reportsDetail.dataset.cashCloseDelegate) {
     refs.reportsDetail.dataset.cashCloseDelegate = "1";
-    refs.reportsDetail.addEventListener("change", (e) => {
-      if (e.target.id !== "cashCloseDateInput") return;
-      state.cashCloseDateYmd = e.target.value || todayLocalYmd();
-      state.cashClosePendingSaveYmd = null;
-      state.cashClosePendingRollbackYmd = null;
-      renderReports();
-    });
     refs.reportsDetail.addEventListener("click", (e) => {
       const button = e.target.closest("button");
       if (!button) return;
@@ -2293,54 +2551,60 @@ function bindEvents() {
       const isRollback = button.id === "rollbackCashCloseButton";
       if (!isSave && !isRollback) return;
       e.preventDefault();
-      const ymd = document.getElementById("cashCloseDateInput")?.value || todayLocalYmd();
+      const shift = getOpenShift();
       void (async () => {
         try {
           if (isSave) {
-            if (state.cashClosePendingSaveYmd !== ymd) {
-              state.cashClosePendingSaveYmd = ymd;
-              state.cashClosePendingRollbackYmd = null;
+            if (!shift) {
+              state.cashCloseUiMessage = { type: "err", text: "Nenhum turno aberto." };
+              renderReports();
+              return;
+            }
+            if (!state.cashClosePendingClose) {
+              state.cashClosePendingClose = true;
+              state.cashClosePendingRollback = false;
               state.cashCloseUiMessage = {
                 type: "warn",
-                text: 'Clique novamente em "Confirmar salvamento" para salvar este fechamento.'
+                text: 'Clique novamente em "Confirmar fechamento" para encerrar o turno.'
               };
               renderReports();
               return;
             }
-            await persistDailyClose(computeCashCloseDraft(ymd));
-            state.cashClosePendingSaveYmd = null;
-            state.cashClosePendingRollbackYmd = null;
-            state.cashCloseUiMessage = { type: "ok", text: "Fechamento salvo." };
+            await persistShiftClose(shift);
+            state.cashClosePendingClose = false;
+            state.cashClosePendingRollback = false;
+            state.cashCloseUiMessage = { type: "ok", text: "Turno fechado com sucesso." };
           } else {
-            if (state.cashClosePendingRollbackYmd !== ymd) {
-              state.cashClosePendingRollbackYmd = ymd;
-              state.cashClosePendingSaveYmd = null;
+            if (!state.cashClosePendingRollback) {
+              state.cashClosePendingRollback = true;
+              state.cashClosePendingClose = false;
               state.cashCloseUiMessage = {
                 type: "warn",
-                text: 'Clique novamente em "Confirmar estorno" para remover o ultimo fechamento.'
+                text: 'Clique novamente para reabrir o ultimo turno fechado.'
               };
               renderReports();
               return;
             }
-            const removed = await rollbackLastDailyClose(ymd);
-            state.cashClosePendingRollbackYmd = null;
+            const removed = await rollbackLastClosedShift();
+            state.cashClosePendingRollback = false;
             state.cashCloseUiMessage = removed
-              ? { type: "ok", text: "Ultimo fechamento estornado." }
-              : { type: "err", text: "Nao ha fechamento para estornar nessa data." };
+              ? { type: "ok", text: "Ultimo turno reaberto." }
+              : { type: "err", text: "Nao ha turno fechado para reabrir." };
           }
           renderDashboard();
           renderReports();
           if (!refs.cashCloseHistoryDialog?.classList.contains("hidden")) {
             renderCashCloseHistoryOverlay();
           }
-        } catch (_) {
-          if (isSave) state.cashClosePendingSaveYmd = null;
-          if (isRollback) state.cashClosePendingRollbackYmd = null;
+        } catch (err) {
+          console.error(err);
+          state.cashClosePendingClose = false;
+          state.cashClosePendingRollback = false;
           state.cashCloseUiMessage = {
             type: "err",
             text: isSave
-              ? "Nao foi possivel salvar o fechamento. Verifique a conexao com o Supabase."
-              : "Nao foi possivel estornar o fechamento. Verifique a conexao com o Supabase."
+              ? (err?.message || "Nao foi possivel fechar o turno.")
+              : (err?.message || "Nao foi possivel reabrir o turno.")
           };
           renderReports();
         }
@@ -2531,11 +2795,17 @@ function bindEvents() {
     const orders = loadOrders();
     const target = orders.find((entry) => String(entry.id) === String(order.id));
     if (!target) return;
+    const openShift = getOpenShift();
+    if (!openShift) {
+      refs.checkoutFeedback.textContent = "Abra um turno no Inicio antes de finalizar a comanda.";
+      return;
+    }
     target.status = "Finalizado";
     target.paymentMethods = paymentMethods;
     target.serviceFeePercent = serviceFeePercent;
     target.totalPaid = totalPaid;
     target.closedAt = new Date().toISOString();
+    target.shiftId = openShift.id;
     saveOrders(orders);
 
     state.currentView = "main";
@@ -2729,7 +2999,6 @@ async function init() {
   const t = todayLocalYmd();
   state.reportDateFrom = t;
   state.reportDateTo = t;
-  state.cashCloseDateYmd = t;
   bindEvents();
   bindIosDoubleTapBlocker();
   bindPullToRefresh(refs.mainContent);
