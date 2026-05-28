@@ -363,6 +363,89 @@ function getOpenShift() {
   return loadShifts().find((s) => s.status === "aberto") || null;
 }
 
+/** Turno criado pela versao antiga (18h–02h automatico), sem vendas nem comandas abertas depois. */
+function isLegacyAutoOpenShift(shift) {
+  if (!shift || shift.status !== "aberto") return false;
+  if (shift.scheduledStart !== "18:00" || shift.scheduledEnd !== "02:00") return false;
+  const payload = shift.payload || {};
+  return !payload.closeSnapshot && !payload.inferredFromOpenOrders;
+}
+
+function shiftHasRegisterActivity(shift, orders) {
+  if (!shift) return false;
+  if (ordersFinalizedInShift(orders, shift).length > 0) return true;
+  const startMs = new Date(shift.startedAt).getTime();
+  if (Number.isNaN(startMs)) return false;
+  return orders.some((o) => {
+    if (normalizeOrderStatus(o.status) !== "Aberta") return false;
+    const created = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
+    return !Number.isNaN(created) && created >= startMs;
+  });
+}
+
+function shouldInferOpenShiftFromOpenOrders(orders) {
+  if (getOpenShift()) return false;
+  const openOrders = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+  if (!openOrders.length) return false;
+  let earliestMs = Infinity;
+  for (const o of openOrders) {
+    const t = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
+    if (!Number.isNaN(t) && t < earliestMs) earliestMs = t;
+  }
+  if (!Number.isFinite(earliestMs)) return false;
+  const hasCloseAfter = loadShifts()
+    .filter((s) => s.status === "fechado" && s.endedAt)
+    .some((s) => new Date(s.endedAt).getTime() >= earliestMs);
+  return !hasCloseAfter;
+}
+
+async function reconcileShiftsAfterBootstrap() {
+  const orders = loadOrders();
+  const open = getOpenShift();
+  if (open && isLegacyAutoOpenShift(open) && !shiftHasRegisterActivity(open, orders)) {
+    const closed = await closeShiftRemote(open, {
+      totalBruto: 0,
+      finalizedOrdersCount: 0,
+      sales: [],
+      legacyAutoClosed: true
+    });
+    state.cache.shifts = loadShifts().map((s) => (String(s.id) === String(closed.id) ? closed : s));
+  }
+  if (!shouldInferOpenShiftFromOpenOrders(orders)) return;
+  const openOrders = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+  let earliestMs = Infinity;
+  let startedAt = openOrders[0]?.createdAt || new Date().toISOString();
+  for (const o of openOrders) {
+    const t = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
+    if (!Number.isNaN(t) && t < earliestMs) {
+      earliestMs = t;
+      startedAt = o.createdAt;
+    }
+  }
+  for (const o of orders) {
+    if (normalizeOrderStatus(o.status) !== "Finalizado" || o.shiftId) continue;
+    const t = new Date(o.closedAt || o.createdAt).getTime();
+    if (!Number.isNaN(t) && t < earliestMs) {
+      earliestMs = t;
+      startedAt = o.closedAt || o.createdAt;
+    }
+  }
+  const startedDate = new Date(startedAt);
+  const created = await insertShiftRemote({
+    referenceDate: todayLocalYmdFromDate(startedDate),
+    startedAt
+  });
+  const withMeta = { ...created, payload: { inferredFromOpenOrders: true } };
+  const sb = await getSupabase();
+  if (sb) {
+    await sb
+      .from("shifts")
+      .update({ payload: { inferredFromOpenOrders: true } })
+      .eq("id", String(created.id));
+  }
+  state.cache.shifts = [withMeta, ...loadShifts().filter((s) => String(s.id) !== String(created.id))];
+}
+
 function formatShiftLabel(shift) {
   if (!shift) return "";
   const opened = shift.startedAt
@@ -387,7 +470,9 @@ function orderBelongsToShift(order, shift) {
     shift.status === "fechado" && shift.endedAt
       ? new Date(shift.endedAt).getTime()
       : Date.now();
-  return t >= start && t <= end;
+  if (t >= start && t <= end) return true;
+  if (shift.payload?.inferredFromOpenOrders && !order.shiftId && t <= end) return true;
+  return false;
 }
 
 function ordersFinalizedInShift(orders, shift) {
@@ -542,6 +627,7 @@ async function applySupabaseSession(session) {
   }
   try {
     await bootstrapFromSupabase(session);
+    await reconcileShiftsAfterBootstrap();
     state.config = loadConfig();
     applyTheme();
     renderAuth();
@@ -1546,7 +1632,7 @@ function renderShiftBar() {
       <div class="rounded-xl border border-outline-variant bg-primary-fixed px-3 py-2.5">
         <p class="text-[10px] font-bold uppercase tracking-wide text-on-primary-fixed-variant">Caixa aberto</p>
         <p class="text-sm font-extrabold text-primary">${formatShiftLabel(shift)}</p>
-        <p class="mt-0.5 text-[10px] text-on-surface-variant">Vendas entram aqui ate voce fechar o caixa.</p>
+        <p class="mt-0.5 text-[10px] text-on-surface-variant">Vendas entram aqui ate voce fechar o caixa.${shift.payload?.inferredFromOpenOrders ? " Horario da primeira comanda aberta (legado nao gravava abertura)." : ""}</p>
       </div>`;
     if (refs.openShiftButton) refs.openShiftButton.classList.add("hidden");
   } else {
@@ -1565,15 +1651,13 @@ function renderDashboard() {
   const shift = getOpenShift();
   const finalizedInShift = shift ? ordersFinalizedInShift(orders, shift) : [];
   const active = orders.filter((order) => normalizeOrderStatus(order.status) === "Aberta");
-  const scopedOrders = ordersForDashboard(orders, shift);
-
   if (refs.dailySalesCount) refs.dailySalesCount.textContent = String(finalizedInShift.length);
   refs.activeOrdersCount.textContent = String(active.length);
   refs.dailyRevenueValue.textContent = formatCurrency(
     finalizedInShift.reduce((s, o) => s + (o.totalPaid || 0), 0)
   );
 
-  const filtered = scopedOrders.filter((order) => {
+  const filtered = orders.filter((order) => {
     if (state.selectedFilter === "all") return true;
     return normalizeOrderStatus(order.status) === state.selectedFilter;
   });
