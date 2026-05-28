@@ -127,6 +127,23 @@
       font-size: 16px !important;
     }
 
+    .app-input:focus {
+      outline: none;
+      border-color: transparent !important;
+      box-shadow: 0 0 0 2px var(--bg-primary) !important;
+    }
+
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px var(--bg-surface-low) inset !important;
+      box-shadow: 0 0 0 1000px var(--bg-surface-low) inset !important;
+      -webkit-text-fill-color: var(--text-on-surface) !important;
+      caret-color: var(--text-on-surface);
+      transition: background-color 99999s ease-out 0s;
+    }
+
     /* Permite selecao apenas onde faz sentido. */
     input,
     textarea,
@@ -494,9 +511,9 @@
       class="login-viewport-min flex flex-col justify-center overflow-y-auto px-margin-mobile py-stack-md">
       <div class="mb-stack-md flex flex-col items-center gap-stack-sm text-center">
         <div
-          class="mb-stack-sm flex h-[7.5rem] w-[7.5rem] shrink-0 items-center justify-center rounded-2xl bg-[#FFF3E8] shadow-sm ring-1 ring-orange-200/50"
+          class="mb-stack-sm flex h-[7.5rem] w-[7.5rem] shrink-0 items-center justify-center rounded-2xl border border-outline-variant bg-primary-fixed shadow-sm"
           aria-hidden="true">
-          <span class="material-symbols-rounded text-[4.5rem] leading-none text-orange-600">local_dining</span>
+          <span class="material-symbols-rounded text-[4.5rem] leading-none text-primary">local_dining</span>
         </div>
         <h1 class="text-3xl font-extrabold text-primary">App da Jana</h1>
         <p class="text-body-md text-on-surface-variant">Lançamentos de comandas · v1.0</p>
@@ -510,7 +527,7 @@
               <span
                 class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary">person</span>
               <input id="usernameInput" type="email" autocomplete="email"
-                class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary"
+                class="app-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-base text-on-surface"
                 placeholder="seu@email.com">
             </div>
           </label>
@@ -520,7 +537,7 @@
               <span
                 class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary">lock</span>
               <input id="passwordInput" type="password"
-                class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary"
+                class="app-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-base text-on-surface"
                 placeholder="Digite sua senha">
             </div>
           </label>
