@@ -785,6 +785,14 @@
           </div>
           <div id="reopenSettingsPanel"
             class="settings-panel mt-stack-md hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
+            <p class="text-sm font-bold text-on-surface">Reabrir caixa</p>
+            <p class="mt-1 text-xs text-on-surface-variant">Desfaz o <strong>ultimo fechamento</strong> e coloca esse
+              mesmo caixa como aberto de novo. So funciona com nenhum outro caixa aberto.</p>
+            <div id="reopenShiftSummary" class="mt-stack-sm rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant"></div>
+            <button id="reopenShiftUndoButton" type="button"
+              class="mt-stack-sm h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Desfazer ultimo fechamento</button>
+            <p id="reopenShiftFeedback" class="mt-2 min-h-[1rem] text-xs text-on-surface-variant"></p>
+            <hr class="my-stack-md border-outline-variant">
             <p class="text-sm font-bold text-on-surface">Reabrir comanda</p>
             <p class="mt-1 text-xs text-on-surface-variant">Comandas finalizadas ou canceladas na data escolhida. Ao
               reabrir, voltam como abertas para edicao.</p>

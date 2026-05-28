@@ -841,13 +841,34 @@ async function persistShiftClose(shift, referenceDateYmd) {
   return closed;
 }
 
-async function rollbackLastClosedShift() {
+function getLastClosedShift() {
   const closed = loadShifts()
     .filter((s) => s.status === "fechado" && s.endedAt)
     .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime());
-  if (!closed.length) return false;
-  if (getOpenShift()) throw new Error("Feche o caixa aberto antes de estornar outro.");
-  const target = closed[0];
+  return closed[0] || null;
+}
+
+function canUndoLastShiftClose() {
+  if (getOpenShift()) return false;
+  return Boolean(getLastClosedShift());
+}
+
+function undoLastShiftCloseHint() {
+  if (getOpenShift()) {
+    return "Feche o caixa aberto antes. Desfazer reabre o ultimo fechado (o mesmo turno), nao um caixa antigo qualquer.";
+  }
+  const last = getLastClosedShift();
+  if (!last) return "Nao ha caixa fechado para desfazer.";
+  const ref = last.referenceDate ? last.referenceDate.split("-").reverse().join("/") : "";
+  return `Reabre o ultimo caixa fechado (ref. ${ref || "—"}). E sempre o mesmo registro — nao escolhe dia no historico.`;
+}
+
+async function rollbackLastClosedShift() {
+  const target = getLastClosedShift();
+  if (!target) return false;
+  if (getOpenShift()) {
+    throw new Error("Feche o caixa aberto antes de desfazer o ultimo fechamento.");
+  }
   const reopened = await reopenShiftRemote(target.id);
   state.cache.shifts = loadShifts().map((s) => (String(s.id) === String(reopened.id) ? reopened : s));
   return true;
@@ -882,7 +903,7 @@ const state = {
   reportDateTo: "",
   cashCloseUiMessage: null,
   cashClosePendingClose: false,
-  cashClosePendingRollback: false,
+  reopenShiftPendingConfirm: false,
   cashCloseReferenceDateYmd: "",
   cashCloseReferenceShiftId: null,
   cashCloseHistoryExpandedId: null,
@@ -1031,6 +1052,9 @@ const refs = {
   reopenConfirmDialog: document.querySelector("#reopenConfirmDialog"),
   reopenConfirmAcceptButton: document.querySelector("#reopenConfirmAcceptButton"),
   reopenConfirmDismissButton: document.querySelector("#reopenConfirmDismissButton"),
+  reopenShiftSummary: document.querySelector("#reopenShiftSummary"),
+  reopenShiftUndoButton: document.querySelector("#reopenShiftUndoButton"),
+  reopenShiftFeedback: document.querySelector("#reopenShiftFeedback"),
   reportsDateFromInput: document.querySelector("#reportsDateFromInput"),
   reportsDateToInput: document.querySelector("#reportsDateToInput"),
   reportsPicker: document.querySelector("#reportsPicker"),
@@ -1548,7 +1572,47 @@ function openReopenConfirmDialog(orderId) {
   refs.reopenConfirmDialog.showModal();
 }
 
+function setReopenShiftFeedback(type, text) {
+  if (!refs.reopenShiftFeedback) return;
+  refs.reopenShiftFeedback.textContent = text || "";
+  refs.reopenShiftFeedback.className = `mt-2 min-h-[1rem] text-xs ${
+    type === "err" ? "text-error" : type === "ok" ? "text-secondary" : type === "warn" ? "text-primary" : "text-on-surface-variant"
+  }`;
+}
+
+function renderReopenShiftPanel() {
+  if (!refs.reopenShiftSummary || !refs.reopenShiftUndoButton) return;
+  const open = getOpenShift();
+  const last = getLastClosedShift();
+  const undoAllowed = canUndoLastShiftClose();
+  if (open) {
+    refs.reopenShiftSummary.innerHTML = `<p class="text-on-surface">Ha um caixa <strong>aberto</strong> (${formatShiftLabel(open)}). Feche-o em Relatorios antes de desfazer outro fechamento.</p>`;
+  } else if (!last) {
+    refs.reopenShiftSummary.innerHTML = "<p>Nenhum caixa fechado encontrado.</p>";
+  } else {
+    const ref = last.referenceDate ? last.referenceDate.split("-").reverse().join("/") : "—";
+    const ended = last.endedAt ? formatDateTimeShort(last.endedAt) : "—";
+    const opened = last.startedAt ? formatDateTimeShort(last.startedAt) : "—";
+    refs.reopenShiftSummary.innerHTML = `
+      <p><span class="font-semibold text-on-surface">Referencia:</span> ${ref}</p>
+      <p class="mt-1"><span class="font-semibold text-on-surface">Abriu:</span> ${opened}</p>
+      <p class="mt-1"><span class="font-semibold text-on-surface">Fechou:</span> ${ended}</p>`;
+  }
+  refs.reopenShiftUndoButton.disabled = !undoAllowed;
+  refs.reopenShiftUndoButton.className = `mt-stack-sm h-touch-target-min w-full rounded-xl border text-sm font-bold ${
+    !undoAllowed
+      ? "cursor-not-allowed border-outline-variant/60 bg-surface-container-low/80 text-on-surface-variant/70"
+      : state.reopenShiftPendingConfirm
+        ? "border-error bg-error text-on-error"
+        : "border-outline-variant bg-surface-container-low text-on-surface"
+  }`;
+  refs.reopenShiftUndoButton.textContent = state.reopenShiftPendingConfirm
+    ? "Confirmar desfazer fechamento"
+    : "Desfazer ultimo fechamento";
+}
+
 function renderReopenPanel() {
+  renderReopenShiftPanel();
   if (!refs.reopenOrdersList) return;
   refs.reopenPanelFeedback.textContent = "";
   let dateVal = (refs.reopenFilterDateInput?.value || "").trim();
@@ -2335,12 +2399,13 @@ function renderReports() {
     state.cashCloseUiMessage = null;
     const shift = getOpenShift();
     const savePending = state.cashClosePendingClose;
-    const rollbackPending = state.cashClosePendingRollback;
     const draft = computeCashCloseDraft(shift);
     if (!shift) {
       body = `
-        <p class="text-sm text-on-surface-variant">Nao ha caixa aberto. Toque em <strong>Abrir caixa</strong> no Inicio antes de fechar.</p>
-        <button type="button" id="openCashCloseHistoryButton" class="mt-3 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Ver historico de caixas fechados</button>`;
+        <p class="text-sm text-on-surface-variant">Nao ha caixa aberto. Para operar, use <strong>Abrir caixa</strong> no Inicio.</p>
+        <p class="mt-2 text-xs text-on-surface-variant">Para desfazer um fechamento, use <strong>Configuracoes → Reabrir</strong>.</p>
+        <button type="button" id="openCashCloseHistoryButton" class="mt-3 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Ver historico de caixas fechados</button>
+        <p id="cashCloseFeedback" class="mt-2 min-h-[1rem] text-xs ${uiMsg?.type === "err" ? "text-error" : uiMsg?.type === "ok" ? "text-secondary" : uiMsg?.type === "warn" ? "text-primary" : "text-on-surface-variant"}">${uiMsg?.text || ""}</p>`;
     } else {
       const refYmd = getCashCloseReferenceDateForUi(shift);
       const refDisplay = refYmd ? refYmd.split("-").reverse().join("/") : "";
@@ -2363,9 +2428,8 @@ function renderReports() {
         </div>
       </div>
       <p class="mt-2 text-xs text-on-surface-variant">${draft.finalizedOrdersCount} comanda(s) finalizada(s) neste caixa.</p>
-      <div class="mt-stack-md grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div class="mt-stack-md grid grid-cols-1 gap-2">
         <button type="button" id="saveCashCloseButton" class="h-touch-target-min w-full rounded-xl text-sm font-bold ${savePending ? "bg-secondary text-on-secondary" : "bg-primary text-on-primary"}">${savePending ? "Confirmar fechamento" : "Fechar caixa"}</button>
-        <button type="button" id="rollbackCashCloseButton" class="h-touch-target-min w-full rounded-xl border text-sm font-bold ${rollbackPending ? "border-error bg-error text-on-error" : "border-outline-variant bg-surface-container-low text-on-surface"}">${rollbackPending ? "Confirmar estorno" : "Reabrir ultimo caixa fechado"}</button>
       </div>
       <button type="button" id="openCashCloseHistoryButton" class="mt-2 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Ver historico de caixas fechados</button>
       <p id="cashCloseFeedback" class="mt-2 min-h-[1rem] text-xs ${uiMsg?.type === "err" ? "text-error" : uiMsg?.type === "ok" ? "text-secondary" : uiMsg?.type === "warn" ? "text-primary" : "text-on-surface-variant"}">${uiMsg?.text || ""}</p>`;
@@ -2823,62 +2887,40 @@ function bindEvents() {
         openCashCloseHistoryDialog();
         return;
       }
-      const isSave = button.id === "saveCashCloseButton";
-      const isRollback = button.id === "rollbackCashCloseButton";
-      if (!isSave && !isRollback) return;
+      if (button.id !== "saveCashCloseButton") return;
       e.preventDefault();
       const shift = getOpenShift();
       void (async () => {
         try {
-          if (isSave) {
-            if (!shift) {
-              state.cashCloseUiMessage = { type: "err", text: "Nenhum caixa aberto." };
-              renderReports();
-              return;
-            }
-            const refInput = document.querySelector("#cashCloseReferenceDateInput");
-            if (refInput?.value) state.cashCloseReferenceDateYmd = refInput.value.trim();
-            const refYmd = state.cashCloseReferenceDateYmd || suggestReferenceDateForShift(shift);
-            if (!isValidYmd(refYmd)) {
-              state.cashCloseUiMessage = {
-                type: "err",
-                text: "Informe o dia de referencia do caixa (campo acima)."
-              };
-              renderReports();
-              return;
-            }
-            if (!state.cashClosePendingClose) {
-              state.cashClosePendingClose = true;
-              state.cashClosePendingRollback = false;
-              const refLabel = refYmd.split("-").reverse().join("/");
-              state.cashCloseUiMessage = {
-                type: "warn",
-                text: `Confirmar fechamento do caixa referente a ${refLabel}? Clique novamente em "Confirmar fechamento".`
-              };
-              renderReports();
-              return;
-            }
-            await persistShiftClose(shift, refYmd);
-            state.cashClosePendingClose = false;
-            state.cashClosePendingRollback = false;
-            state.cashCloseUiMessage = { type: "ok", text: "Caixa fechado com sucesso." };
-          } else {
-            if (!state.cashClosePendingRollback) {
-              state.cashClosePendingRollback = true;
-              state.cashClosePendingClose = false;
-              state.cashCloseUiMessage = {
-                type: "warn",
-                text: 'Clique novamente para reabrir o ultimo caixa fechado.'
-              };
-              renderReports();
-              return;
-            }
-            const removed = await rollbackLastClosedShift();
-            state.cashClosePendingRollback = false;
-            state.cashCloseUiMessage = removed
-              ? { type: "ok", text: "Ultimo caixa reaberto." }
-              : { type: "err", text: "Nao ha caixa fechado para reabrir." };
+          if (!shift) {
+            state.cashCloseUiMessage = { type: "err", text: "Nenhum caixa aberto." };
+            renderReports();
+            return;
           }
+          const refInput = document.querySelector("#cashCloseReferenceDateInput");
+          if (refInput?.value) state.cashCloseReferenceDateYmd = refInput.value.trim();
+          const refYmd = state.cashCloseReferenceDateYmd || suggestReferenceDateForShift(shift);
+          if (!isValidYmd(refYmd)) {
+            state.cashCloseUiMessage = {
+              type: "err",
+              text: "Informe o dia de referencia do caixa (campo acima)."
+            };
+            renderReports();
+            return;
+          }
+          if (!state.cashClosePendingClose) {
+            state.cashClosePendingClose = true;
+            const refLabel = refYmd.split("-").reverse().join("/");
+            state.cashCloseUiMessage = {
+              type: "warn",
+              text: `Confirmar fechamento do caixa referente a ${refLabel}? Clique novamente em "Confirmar fechamento".`
+            };
+            renderReports();
+            return;
+          }
+          await persistShiftClose(shift, refYmd);
+          state.cashClosePendingClose = false;
+          state.cashCloseUiMessage = { type: "ok", text: "Caixa fechado com sucesso." };
           renderDashboard();
           renderReports();
           if (!refs.cashCloseHistoryDialog?.classList.contains("hidden")) {
@@ -2887,12 +2929,9 @@ function bindEvents() {
         } catch (err) {
           console.error(err);
           state.cashClosePendingClose = false;
-          state.cashClosePendingRollback = false;
           state.cashCloseUiMessage = {
             type: "err",
-            text: isSave
-              ? (err?.message || "Nao foi possivel fechar o caixa.")
-              : (err?.message || "Nao foi possivel reabrir o caixa.")
+            text: err?.message || "Nao foi possivel fechar o caixa."
           };
           renderReports();
         }
@@ -3202,6 +3241,37 @@ function bindEvents() {
 
   refs.reopenSearchButton?.addEventListener("click", () => renderReopenPanel());
   refs.reopenFilterDateInput?.addEventListener("change", () => renderReopenPanel());
+  refs.reopenShiftUndoButton?.addEventListener("click", () => {
+    void (async () => {
+      try {
+        if (!canUndoLastShiftClose()) {
+          setReopenShiftFeedback("err", undoLastShiftCloseHint());
+          renderReopenShiftPanel();
+          return;
+        }
+        if (!state.reopenShiftPendingConfirm) {
+          state.reopenShiftPendingConfirm = true;
+          setReopenShiftFeedback("warn", "Confirmar? O ultimo caixa fechado volta a ficar aberto (o mesmo turno).");
+          renderReopenShiftPanel();
+          return;
+        }
+        const ok = await rollbackLastClosedShift();
+        state.reopenShiftPendingConfirm = false;
+        setReopenShiftFeedback(
+          ok ? "ok" : "err",
+          ok ? "Caixa reaberto. Confira no Inicio." : "Nao foi possivel desfazer o fechamento."
+        );
+        renderDashboard();
+        renderReports();
+        renderReopenShiftPanel();
+      } catch (err) {
+        console.error(err);
+        state.reopenShiftPendingConfirm = false;
+        setReopenShiftFeedback("err", err?.message || "Nao foi possivel reabrir o caixa.");
+        renderReopenShiftPanel();
+      }
+    })();
+  });
 
   refs.reopenConfirmDismissButton?.addEventListener("click", () => {
     refs.reopenConfirmDialog?.close();
