@@ -2026,7 +2026,7 @@ function renderProductAdminCategoryFilters() {
   refs.productAdminCategoryButtons.innerHTML = categories
     .map(
       (category) => `
-      <button type="button" class="product-admin-category-filter h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.productAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
+      <button type="button" class="product-admin-category-filter h-10 rounded-full px-3 text-xs font-bold ${category === state.productAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
         ${category}
       </button>`
     )
