@@ -748,7 +748,16 @@
             </form>
             <div class="mt-stack-sm">
               <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Filtrar por categoria</span>
-              <div id="productAdminCategoryButtons" class="flex flex-wrap gap-2"></div>
+              <div class="settings-tabs-wrap">
+                <div id="productAdminCategoryTabsLeftHint" class="settings-tabs-hint settings-tabs-hint-left">
+                  <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_left</span>
+                </div>
+                <div id="productAdminCategoryButtons"
+                  class="settings-tabs-scroll flex gap-2 overflow-x-auto pb-1"></div>
+                <div id="productAdminCategoryTabsRightHint" class="settings-tabs-hint settings-tabs-hint-right">
+                  <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_right</span>
+                </div>
+              </div>
             </div>
             <ul id="productsList" class="mt-stack-md space-y-stack-sm"></ul>
           </div>

@@ -1043,6 +1043,8 @@ const refs = {
   clearProductFormButton: document.querySelector("#clearProductFormButton"),
   productsList: document.querySelector("#productsList"),
   productAdminCategoryButtons: document.querySelector("#productAdminCategoryButtons"),
+  productAdminCategoryTabsLeftHint: document.querySelector("#productAdminCategoryTabsLeftHint"),
+  productAdminCategoryTabsRightHint: document.querySelector("#productAdminCategoryTabsRightHint"),
   tableModeToggle: document.querySelector("#tableModeToggle"),
   serviceFeeToggle: document.querySelector("#serviceFeeToggle"),
   orderTableGroup: document.querySelector("#orderTableGroup"),
@@ -1280,6 +1282,23 @@ function updateCategoryTabsHints() {
   const showRight = hasOverflow && content.scrollLeft < (maxScrollLeft - 4);
   refs.categoryTabsLeftHint.classList.toggle("show", showLeft);
   refs.categoryTabsRightHint.classList.toggle("show", showRight);
+}
+
+function updateProductAdminCategoryTabsHints() {
+  if (
+    !refs.productAdminCategoryButtons ||
+    !refs.productAdminCategoryTabsLeftHint ||
+    !refs.productAdminCategoryTabsRightHint
+  ) {
+    return;
+  }
+  const scroller = refs.productAdminCategoryButtons;
+  const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+  const hasOverflow = maxScrollLeft > 2;
+  const showLeft = hasOverflow && scroller.scrollLeft > 4;
+  const showRight = hasOverflow && scroller.scrollLeft < maxScrollLeft - 4;
+  refs.productAdminCategoryTabsLeftHint.classList.toggle("show", showLeft);
+  refs.productAdminCategoryTabsRightHint.classList.toggle("show", showRight);
 }
 
 function isPendingLocalOrder() {
@@ -2026,11 +2045,12 @@ function renderProductAdminCategoryFilters() {
   refs.productAdminCategoryButtons.innerHTML = categories
     .map(
       (category) => `
-      <button type="button" class="product-admin-category-filter h-10 rounded-full px-3 text-xs font-bold ${category === state.productAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
+      <button type="button" class="product-admin-category-filter h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.productAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
         ${category}
       </button>`
     )
     .join("");
+  updateProductAdminCategoryTabsHints();
 }
 
 function renderProductAdmin() {
@@ -3044,8 +3064,10 @@ function bindEvents() {
 
   refs.settingsTabsScroll?.addEventListener("scroll", updateSettingsTabsHints);
   refs.categoryButtons?.addEventListener("scroll", updateCategoryTabsHints);
+  refs.productAdminCategoryButtons?.addEventListener("scroll", updateProductAdminCategoryTabsHints);
   window.addEventListener("resize", updateSettingsTabsHints);
   window.addEventListener("resize", updateCategoryTabsHints);
+  window.addEventListener("resize", updateProductAdminCategoryTabsHints);
 
   refs.closeDetailDialogButton.addEventListener("click", () => {
     state.currentView = "main";
