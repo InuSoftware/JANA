@@ -639,10 +639,7 @@
           <div id="reportsPicker" class="mt-stack-md grid grid-cols-2 gap-2">
             <button type="button"
               class="report-type-button rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-left text-sm font-semibold text-on-surface shadow-sm transition active:scale-[0.98]"
-              data-report="daily">Vendas no periodo</button>
-            <button type="button"
-              class="report-type-button rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-left text-sm font-semibold text-on-surface shadow-sm transition active:scale-[0.98]"
-              data-report="revenue">Faturamento</button>
+              data-report="daily">Vendas e faturamento</button>
             <button type="button"
               class="report-type-button rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-left text-sm font-semibold text-on-surface shadow-sm transition active:scale-[0.98]"
               data-report="payments">Formas de pagamento</button>
@@ -735,6 +732,10 @@
                   class="h-touch-target-min flex-1 rounded-lg border border-outline text-sm font-bold text-on-surface">Limpar</button>
               </div>
             </form>
+            <div class="mt-stack-sm">
+              <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Filtrar por categoria</span>
+              <div id="productAdminCategoryButtons" class="flex gap-2 overflow-x-auto pb-1"></div>
+            </div>
             <ul id="productsList" class="mt-stack-md space-y-stack-sm"></ul>
           </div>
 

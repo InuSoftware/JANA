@@ -52,8 +52,7 @@ O sistema de comandas é uma aplicação web para gerenciamento de pedidos em es
 
 *   **Seleção de Período:** Define o intervalo de datas para os relatórios.
 *   **Tipos de Relatórios:**
-    *   Vendas no período (daily).
-    *   Faturamento (revenue).
+    *   Vendas e faturamento (daily) — quantidade de comandas finalizadas e total pago no período.
     *   Formas de pagamento (payments).
     *   Itens mais vendidos (products).
     *   Horário de pico (peakHour).

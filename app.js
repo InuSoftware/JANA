@@ -508,7 +508,7 @@ function computeCashCloseDraft(shift) {
   }
   const orders = loadOrders();
   const slice = ordersFinalizedInShift(orders, shift);
-  const activeOrdersCount = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta").length;
+  const activeOrdersCount = getOpenOrders().length;
   return {
     shiftId: shift.id,
     referenceDate: shift.referenceDate || "",
@@ -831,6 +831,19 @@ async function openShiftManual() {
   return created;
 }
 
+/** Abre o caixa se estiver fechado (ex.: primeira comanda do dia). */
+async function ensureOpenShiftAuto() {
+  if (getOpenShift()) return true;
+  try {
+    await openShiftManual();
+    return true;
+  } catch (e) {
+    console.error("[JANA] ensureOpenShiftAuto", e);
+    alert((e && e.message) || "Nao foi possivel abrir o caixa automaticamente.");
+    return false;
+  }
+}
+
 async function persistShiftClose(shift, referenceDateYmd) {
   const ref = referenceDateYmd && isValidYmd(referenceDateYmd) ? referenceDateYmd : suggestReferenceDateForShift(shift);
   const draft = computeCashCloseDraft(shift);
@@ -895,6 +908,7 @@ const state = {
   selectedTab: "dashboardTab",
   selectedSettingsTab: "products",
   selectedCategory: "Todas",
+  productAdminCategoryFilter: "Todas",
   productSearch: "",
   detailAction: null,
   cancelConfirmOpen: false,
@@ -1028,6 +1042,7 @@ const refs = {
   productRequiresPrepInput: document.querySelector("#productRequiresPrepInput"),
   clearProductFormButton: document.querySelector("#clearProductFormButton"),
   productsList: document.querySelector("#productsList"),
+  productAdminCategoryButtons: document.querySelector("#productAdminCategoryButtons"),
   tableModeToggle: document.querySelector("#tableModeToggle"),
   serviceFeeToggle: document.querySelector("#serviceFeeToggle"),
   orderTableGroup: document.querySelector("#orderTableGroup"),
@@ -1400,6 +1415,27 @@ function normalizeOrderStatus(status) {
   return "Aberta";
 }
 
+function getOpenOrders() {
+  return loadOrders().filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+}
+
+function formatOpenOrdersCashCloseHint(maxNames = 4) {
+  const open = getOpenOrders();
+  if (!open.length) return "";
+  const n = open.length;
+  const names = open
+    .map((o) => {
+      const label = (o.customer || "").trim() || "Sem nome";
+      const table = state.config.useTables && o.table ? ` · mesa ${o.table}` : "";
+      return `${label}${table}`;
+    })
+    .slice(0, maxNames);
+  const extra = n > maxNames ? ` e mais ${n - maxNames}` : "";
+  const list = names.join(", ");
+  const plural = n === 1 ? "comanda em aberto" : "comandas em aberto";
+  return `Ainda ha ${n} ${plural}: ${list}${extra}. Finalize ou cancele no Inicio antes de fechar o caixa.`;
+}
+
 function deriveOrderStatus(order) {
   if (order.status === "Finalizado" || order.status === "Cancelada") return order.status;
   return "Aberta";
@@ -1550,12 +1586,27 @@ function orderReopenEventYmd(order) {
   return "";
 }
 
+function recordOrderReopenAudit(order, previousStatus) {
+  const entry = {
+    reopenedAt: new Date().toISOString(),
+    reopenedBy: state.user?.email || state.user?.username || null,
+    previousStatus,
+    previousClosedAt: order.closedAt || null,
+    previousCanceledAt: order.canceledAt || null,
+    previousTotalPaid: order.totalPaid ?? null,
+    previousPaymentMethods: Array.isArray(order.paymentMethods) ? [...order.paymentMethods] : []
+  };
+  order.reopenHistory = [...(Array.isArray(order.reopenHistory) ? order.reopenHistory : []), entry];
+  order.lastReopenedAt = entry.reopenedAt;
+}
+
 function performReopenOrder(orderId) {
   const orders = loadOrders();
   const target = orders.find((o) => String(o.id) === String(orderId));
   if (!target) return false;
   const st = normalizeOrderStatus(target.status);
   if (st !== "Finalizado" && st !== "Cancelada") return false;
+  recordOrderReopenAudit(target, st);
   target.status = "Aberta";
   delete target.closedAt;
   delete target.canceledAt;
@@ -1692,7 +1743,9 @@ function persistOrderTableFromDetail() {
   saveOrders(orders);
 }
 
-function createNewOrderAndOpen() {
+async function createNewOrderAndOpen() {
+  if (!(await ensureOpenShiftAuto())) return;
+
   state.pendingNewOrder = {
     table: "",
     customer: "",
@@ -1812,7 +1865,9 @@ function renderDashboard() {
     .join("");
 
   document.querySelectorAll(".order-open-button").forEach((button) => {
-    button.addEventListener("click", () => openDetailDialog(button.dataset.orderId));
+    button.addEventListener("click", () => {
+      void openDetailDialog(button.dataset.orderId);
+    });
   });
   document.querySelectorAll(".order-finalize-button").forEach((button) => {
     button.addEventListener("click", () => void beginFinalizeFlowForOrderId(button.dataset.orderId));
@@ -1884,28 +1939,11 @@ function renderSettings() {
   refs.categoriesList.innerHTML = (state.config.categories || [])
     .map((category) => `
       <li class="flex items-center justify-between rounded-lg border border-outline-variant px-3 py-2">
-        <div class="flex items-center gap-2">
-          <input class="category-prep-toggle h-4 w-4" type="checkbox" data-category="${category}" ${categoryRequiresPrep(category) ? "checked" : ""}>
-          <span class="text-sm font-semibold text-on-surface">${category}</span>
-          <span class="text-[10px] text-on-surface-variant">preparo</span>
-        </div>
+        <span class="text-sm font-semibold text-on-surface">${category}</span>
         <button class="delete-category-button h-8 rounded-md border border-error-container bg-error-container px-2 text-xs font-bold text-error" data-category="${category}">Excluir</button>
       </li>
     `)
     .join("");
-
-  document.querySelectorAll(".category-prep-toggle").forEach((toggle) => {
-    toggle.addEventListener("change", () => {
-      const category = toggle.dataset.category;
-      if (!category) return;
-      const next = new Set(state.config.prepCategories || []);
-      if (toggle.checked) next.add(category);
-      else next.delete(category);
-      state.config.prepCategories = [...next];
-      saveConfig(state.config);
-      renderAll();
-    });
-  });
 
   document.querySelectorAll(".delete-category-button").forEach((button) => {
     button.addEventListener("click", () => deleteCategory(button.dataset.category));
@@ -1973,11 +2011,43 @@ function renderSettings() {
   }
 }
 
+function productCategoryFilterOptions() {
+  const configuredCategories = (state.config.categories || []).filter(Boolean);
+  const productCategories = loadProducts().map((product) => product.category).filter(Boolean);
+  return ["Todas", ...new Set([...configuredCategories, ...productCategories])];
+}
+
+function renderProductAdminCategoryFilters() {
+  if (!refs.productAdminCategoryButtons) return;
+  const categories = productCategoryFilterOptions();
+  if (!categories.includes(state.productAdminCategoryFilter)) {
+    state.productAdminCategoryFilter = "Todas";
+  }
+  refs.productAdminCategoryButtons.innerHTML = categories
+    .map(
+      (category) => `
+      <button type="button" class="product-admin-category-filter h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.productAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
+        ${category}
+      </button>`
+    )
+    .join("");
+}
+
 function renderProductAdmin() {
-  const products = loadProducts();
+  renderProductAdminCategoryFilters();
+  const allProducts = loadProducts();
+  const products = allProducts.filter(
+    (product) =>
+      state.productAdminCategoryFilter === "Todas" || product.category === state.productAdminCategoryFilter
+  );
+
+  if (!allProducts.length) {
+    refs.productsList.innerHTML = "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto cadastrado.</li>";
+    return;
+  }
 
   if (!products.length) {
-    refs.productsList.innerHTML = "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto cadastrado.</li>";
+    refs.productsList.innerHTML = `<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto em "${state.productAdminCategoryFilter}".</li>`;
     return;
   }
 
@@ -2010,9 +2080,7 @@ function renderProductAdmin() {
 
 function renderCategoryOptions() {
   if (!refs.categoryButtons) return;
-  const configuredCategories = (state.config.categories || []).filter(Boolean);
-  const productCategories = loadProducts().map((product) => product.category).filter(Boolean);
-  const categories = ["Todas", ...new Set([...configuredCategories, ...productCategories])];
+  const categories = productCategoryFilterOptions();
   if (!categories.includes(state.selectedCategory)) {
     state.selectedCategory = "Todas";
   }
@@ -2259,8 +2327,7 @@ function renderReports() {
   refs.reportsDetail.classList.remove("hidden");
 
   const titleMap = {
-    daily: "Vendas no periodo",
-    revenue: "Faturamento",
+    daily: "Vendas e faturamento",
     payments: "Formas de pagamento",
     products: "Itens mais vendidos",
     peakHour: "Horario de pico",
@@ -2271,20 +2338,20 @@ function renderReports() {
   const title = titleMap[state.selectedReport] || "Relatorio";
 
   let body = "";
-  if (state.selectedReport === "daily") {
+  if (state.selectedReport === "daily" || state.selectedReport === "revenue") {
     body = `
       <p class="text-xs uppercase text-on-surface-variant">${fromYmd === toYmd ? `Data ${fromYmd}` : `${fromYmd} a ${toYmd}`}</p>
-      <p class="mt-3 text-sm text-on-surface-variant">Comandas finalizadas</p>
-      <p class="text-2xl font-extrabold text-primary">${orderCount}</p>
-      <p class="mt-3 text-sm text-on-surface-variant">Total pago (soma)</p>
-      <p class="text-2xl font-extrabold text-secondary">${formatCurrency(totalRev)}</p>
-    `;
-  } else if (state.selectedReport === "revenue") {
-    body = `
-      <p class="text-xs uppercase text-on-surface-variant">${fromYmd === toYmd ? `Data ${fromYmd}` : `${fromYmd} a ${toYmd}`}</p>
-      <p class="mt-3 text-sm text-on-surface-variant">Faturamento (total pago)</p>
-      <p class="text-2xl font-extrabold text-primary">${formatCurrency(totalRev)}</p>
-      <p class="mt-2 text-xs text-on-surface-variant">${orderCount} comanda(s) no periodo.</p>
+      <p class="mt-2 text-[11px] text-on-surface-variant">Comandas <strong>finalizadas</strong> no periodo (pela data do fechamento).</p>
+      <div class="mt-stack-md grid grid-cols-2 gap-2">
+        <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2">
+          <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Comandas</p>
+          <p class="text-2xl font-extrabold text-primary">${orderCount}</p>
+        </div>
+        <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2">
+          <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Faturamento</p>
+          <p class="text-2xl font-extrabold text-secondary">${formatCurrency(totalRev)}</p>
+        </div>
+      </div>
     `;
   } else if (state.selectedReport === "payments") {
     const shares = aggregatePaymentMethodShares(slice);
@@ -2420,10 +2487,18 @@ function renderReports() {
           class="mt-2 h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface" />
         <p class="mt-1.5 text-[10px] text-on-surface-variant">Usado nos relatorios e no historico (ex.: operacao da noite de <strong>${refDisplay || "—"}</strong> fechada depois da meia-noite). Voce pode ajustar antes de confirmar.</p>
       </div>
+      ${
+        draft.activeOrdersCount > 0
+          ? `<div class="mt-stack-md rounded-xl border-2 border-error bg-error-container/40 px-3 py-3" role="alert">
+              <p class="text-sm font-extrabold text-error">Venda em aberto</p>
+              <p class="mt-1 text-xs text-on-surface">${formatOpenOrdersCashCloseHint()}</p>
+            </div>`
+          : ""
+      }
       <div class="mt-stack-md grid grid-cols-2 gap-2">
-        <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2">
+        <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2 ${draft.activeOrdersCount > 0 ? "ring-2 ring-error" : ""}">
           <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Em aberto</p>
-          <p class="text-xl font-extrabold text-primary">${draft.activeOrdersCount}</p>
+          <p class="text-xl font-extrabold ${draft.activeOrdersCount > 0 ? "text-error" : "text-primary"}">${draft.activeOrdersCount}</p>
         </div>
         <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2">
           <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Total bruto</p>
@@ -2467,7 +2542,11 @@ function renderAll() {
   }
 }
 
-function openDetailDialog(orderId, options = {}) {
+async function openDetailDialog(orderId, options = {}) {
+  const row = loadOrders().find((entry) => String(entry.id) === String(orderId));
+  const status = row ? normalizeOrderStatus(row.status) : "Aberta";
+  if (status === "Aberta" && !(await ensureOpenShiftAuto())) return;
+
   state.pendingNewOrder = null;
   state.selectedOrderId = orderId;
   state.productSearch = "";
@@ -2475,9 +2554,6 @@ function openDetailDialog(orderId, options = {}) {
   state.cancelConfirmOpen = false;
   state.currentView = "detail";
   refs.productSearchInput.value = "";
-
-  const row = loadOrders().find((entry) => String(entry.id) === String(orderId));
-  const status = row ? normalizeOrderStatus(row.status) : "Aberta";
   const isLocked = status === "Finalizado" || status === "Cancelada";
   if (options.detailAction !== undefined) {
     state.detailAction = options.detailAction;
@@ -2491,6 +2567,8 @@ function openDetailDialog(orderId, options = {}) {
 }
 
 async function beginFinalizeFlowForOrderId(orderId) {
+  if (!(await ensureOpenShiftAuto())) return;
+
   state.pendingNewOrder = null;
   state.selectedOrderId = orderId;
   const order = loadOrders().find((entry) => String(entry.id) === String(orderId));
@@ -2498,7 +2576,7 @@ async function beginFinalizeFlowForOrderId(orderId) {
 
   const customerName = (order.customer || "").trim();
   if (!customerName) {
-    openDetailDialog(orderId, { detailAction: null });
+    void openDetailDialog(orderId, { detailAction: null });
     refs.detailCustomerFeedback.textContent = "Informe o nome do cliente antes de finalizar.";
     return;
   }
@@ -2843,7 +2921,9 @@ function bindEvents() {
     })();
   });
 
-  refs.newOrderButton.addEventListener("click", createNewOrderAndOpen);
+  refs.newOrderButton.addEventListener("click", () => {
+    void createNewOrderAndOpen();
+  });
   refs.closeOrderDialogButton.addEventListener("click", () => refs.orderDialog.close());
 
   refs.bottomTabs.forEach((button) => {
@@ -2914,9 +2994,13 @@ function bindEvents() {
           if (!state.cashClosePendingClose) {
             state.cashClosePendingClose = true;
             const refLabel = refYmd.split("-").reverse().join("/");
+            const openHint = formatOpenOrdersCashCloseHint();
+            const openWarn = openHint
+              ? `${openHint} Se quiser fechar mesmo assim, `
+              : "";
             state.cashCloseUiMessage = {
               type: "warn",
-              text: `Confirmar fechamento do caixa referente a ${refLabel}? Clique novamente em "Confirmar fechamento".`
+              text: `${openWarn}confirme o fechamento do caixa referente a ${refLabel}. Clique novamente em "Confirmar fechamento".`
             };
             renderReports();
             return;
@@ -2944,9 +3028,11 @@ function bindEvents() {
 
   refs.orderForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    createNewOrderAndOpen();
-    refs.orderForm.reset();
-    refs.orderDialog.close();
+    void (async () => {
+      await createNewOrderAndOpen();
+      refs.orderForm.reset();
+      refs.orderDialog.close();
+    })();
   });
 
   refs.settingsTabButtons.forEach((button) => {
@@ -3095,8 +3181,11 @@ function bindEvents() {
   });
 
   refs.closeCheckoutDialogButton.addEventListener("click", () => {
-    state.currentView = "detail";
-    renderView();
+    state.currentView = "main";
+    state.detailAction = null;
+    state.selectedOrderId = null;
+    refs.checkoutFeedback.textContent = "";
+    renderAll();
   });
   refs.closeCashCloseHistoryButton?.addEventListener("click", closeCashCloseHistoryDialog);
   refs.cashCloseHistoryBody?.addEventListener("click", (e) => {
@@ -3184,6 +3273,13 @@ function bindEvents() {
   });
 
   refs.clearProductFormButton.addEventListener("click", clearProductForm);
+
+  refs.productAdminCategoryButtons?.addEventListener("click", (e) => {
+    const button = e.target.closest(".product-admin-category-filter");
+    if (!button) return;
+    state.productAdminCategoryFilter = button.dataset.category || "Todas";
+    renderProductAdmin();
+  });
 
   refs.tableModeToggle.addEventListener("change", () => {
     state.config.useTables = refs.tableModeToggle.checked;
