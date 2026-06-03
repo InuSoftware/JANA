@@ -70,13 +70,14 @@ function defaultConfigPayload() {
   };
 }
 
-function productRowToApp(row) {
+function productRowToApp(row, stockQty) {
   return {
     id: row.id,
     name: row.name,
     category: row.category,
     price: Number(row.price),
-    requiresPrep: row.requires_prep === true
+    requiresPrep: row.requires_prep === true,
+    stock: stockQty != null ? Math.trunc(Number(stockQty) || 0) : 0
   };
 }
 
@@ -88,6 +89,40 @@ function productToRow(p) {
     price: p.price,
     requires_prep: p.requiresPrep === true
   };
+}
+
+function getProductStock(productId) {
+  const product = loadProducts().find((entry) => String(entry.id) === String(productId));
+  return product ? Math.trunc(Number(product.stock) || 0) : 0;
+}
+
+function setProductStockLocal(productId, quantity) {
+  const product = loadProducts().find((entry) => String(entry.id) === String(productId));
+  if (product) product.stock = Math.trunc(Number(quantity) || 0);
+}
+
+/** Debito/credito silencioso na venda ou cancelamento de item (nao bloqueia fluxo). */
+function applyStockDeltaSilently(productId, delta) {
+  if (!productId || !delta) return;
+  const d = Math.trunc(delta);
+  if (!d) return;
+  setProductStockLocal(productId, getProductStock(productId) + d);
+  void adjustProductStockRemote(productId, d).catch((e) => console.error("[JANA] estoque", e));
+}
+
+function restoreOrderItemsToStock(items) {
+  for (const item of items || []) {
+    const qty = Math.trunc(Number(item.qty) || 0);
+    if (qty > 0 && item.productId) applyStockDeltaSilently(item.productId, qty);
+  }
+}
+
+function abandonPendingOrder() {
+  if (state.pendingNewOrder?.items?.length) {
+    restoreOrderItemsToStock(state.pendingNewOrder.items);
+  }
+  state.pendingNewOrder = null;
+  if (state.selectedOrderId === PENDING_ORDER_ID) state.selectedOrderId = null;
 }
 
 function commandaToPayload(order) {
@@ -585,8 +620,9 @@ async function bootstrapFromSupabase(session) {
   }
   await ensureProfile(session, supabase);
 
-  const [pRes, cRes, sRes, dRes, cfgRes, profRes] = await Promise.all([
+  const [pRes, stockRes, cRes, sRes, dRes, cfgRes, profRes] = await Promise.all([
     supabase.from("products").select("*"),
+    supabase.from("product_stock").select("product_id, quantity"),
     supabase.from("commandas").select("id, payload, status, created_at, updated_at, closed_at, shift_id"),
     supabase.from("shifts").select("*").order("started_at", { ascending: false }),
     supabase.from("daily_closes").select("id, payload, closed_at, date_ymd"),
@@ -595,6 +631,9 @@ async function bootstrapFromSupabase(session) {
   ]);
 
   if (pRes.error) throw pRes.error;
+  if (stockRes.error) {
+    console.warn("[JANA] product_stock indisponivel (rode 010_product_stock.sql):", stockRes.error.message);
+  }
   if (cRes.error) throw cRes.error;
   if (sRes.error) {
     console.warn("[JANA] shifts indisponivel (rode 003_shifts.sql):", sRes.error.message);
@@ -603,7 +642,11 @@ async function bootstrapFromSupabase(session) {
   if (cfgRes.error) throw cfgRes.error;
   if (profRes.error) throw profRes.error;
 
-  state.cache.products = (pRes.data || []).map(productRowToApp);
+  const stockByProduct = {};
+  for (const row of stockRes.error ? [] : stockRes.data || []) {
+    stockByProduct[row.product_id] = Math.trunc(Number(row.quantity) || 0);
+  }
+  state.cache.products = (pRes.data || []).map((row) => productRowToApp(row, stockByProduct[row.id] ?? 0));
   state.cache.commandas = (cRes.data || []).map((r) => {
     const base = { ...(r.payload || {}), id: r.id };
     if (r.status != null && r.status !== "") base.status = r.status;
@@ -693,6 +736,34 @@ async function deleteProductRemote(productId) {
   if (!sb) return;
   const { error } = await sb.from("products").delete().eq("id", String(productId));
   if (error) throw error;
+}
+
+async function adjustProductStockRemote(productId, delta) {
+  const sb = await getSupabase();
+  if (!sb) return;
+  const { error } = await sb.rpc("adjust_product_stock", {
+    p_product_id: String(productId),
+    p_delta: Math.trunc(delta)
+  });
+  if (error) throw error;
+}
+
+async function setProductStockRemote(productId, quantity) {
+  const sb = await getSupabase();
+  if (!sb) return;
+  const { error } = await sb.rpc("set_product_stock", {
+    p_product_id: String(productId),
+    p_quantity: Math.trunc(quantity)
+  });
+  if (error) throw error;
+}
+
+async function ensureProductStockRowRemote(productId) {
+  try {
+    await setProductStockRemote(productId, getProductStock(productId));
+  } catch (e) {
+    console.error("[JANA] ensureProductStockRow", e);
+  }
 }
 
 async function upsertCommandaRemote(order) {
@@ -1042,6 +1113,9 @@ const refs = {
   productRequiresPrepInput: document.querySelector("#productRequiresPrepInput"),
   clearProductFormButton: document.querySelector("#clearProductFormButton"),
   productsList: document.querySelector("#productsList"),
+  stockProductsList: document.querySelector("#stockProductsList"),
+  stockSaveAllButton: document.querySelector("#stockSaveAllButton"),
+  stockAdminFeedback: document.querySelector("#stockAdminFeedback"),
   productAdminCategoryButtons: document.querySelector("#productAdminCategoryButtons"),
   productAdminCategoryTabsLeftHint: document.querySelector("#productAdminCategoryTabsLeftHint"),
   productAdminCategoryTabsRightHint: document.querySelector("#productAdminCategoryTabsRightHint"),
@@ -1111,6 +1185,12 @@ function showAuthBootScreen() {
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+/** Indicador discreto de estoque no catalogo da comanda. */
+function formatProductStockHint(stock) {
+  const n = Math.trunc(Number(stock) || 0);
+  return `<span class="product-stock-hint shrink-0 text-[10px] font-medium tabular-nums text-on-surface-variant/70" title="Estoque atual">${n} un.</span>`;
 }
 
 function loadProducts() {
@@ -1789,7 +1869,7 @@ function setLoggedUser(user) {
 
 function clearLoggedUser() {
   state.user = null;
-  state.pendingNewOrder = null;
+  abandonPendingOrder();
   state.selectedOrderId = null;
 }
 
@@ -1800,8 +1880,7 @@ function renderAuth() {
     refs.loginScreen.classList.add("hidden");
     refs.appScreen.classList.remove("hidden");
     refs.currentUserLabel.textContent = `${state.user.username} (${state.user.role})`;
-    state.pendingNewOrder = null;
-    if (state.selectedOrderId === PENDING_ORDER_ID) state.selectedOrderId = null;
+    if (state.selectedOrderId === PENDING_ORDER_ID) abandonPendingOrder();
     state.currentView = "main";
     renderAll();
   } else {
@@ -1935,6 +2014,7 @@ function renderSettings() {
   refs.settingsPanels.forEach((panel) => panel.classList.add("hidden"));
   const panelMap = {
     products: document.querySelector("#productsSettingsPanel"),
+    inventory: document.querySelector("#inventorySettingsPanel"),
     operation: document.querySelector("#operationSettingsPanel"),
     categories: document.querySelector("#categoriesSettingsPanel"),
     payments: document.querySelector("#paymentsSettingsPanel"),
@@ -2028,6 +2108,9 @@ function renderSettings() {
   if (state.selectedSettingsTab === "reopen") {
     renderReopenPanel();
   }
+  if (state.selectedSettingsTab === "inventory") {
+    renderStockAdmin();
+  }
 }
 
 function productCategoryFilterOptions() {
@@ -2095,6 +2178,169 @@ function renderProductAdmin() {
 
   document.querySelectorAll(".product-delete-button").forEach((button) => {
     button.addEventListener("click", () => deleteProduct(button.dataset.productId));
+  });
+}
+
+function renderStockAdmin() {
+  if (!refs.stockProductsList) return;
+  const products = loadProducts().slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  if (!products.length) {
+    refs.stockProductsList.innerHTML =
+      "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto cadastrado.</li>";
+    return;
+  }
+  refs.stockProductsList.innerHTML = products
+    .map((product) => {
+      const stock = Math.trunc(Number(product.stock) || 0);
+      return `
+      <li class="stock-product-row rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm" data-product-id="${product.id}">
+        <p class="text-sm font-bold text-primary">${product.name}</p>
+        <p class="text-xs text-on-surface-variant">${product.category}</p>
+        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+          <label class="block">
+            <span class="mb-1 block text-[11px] font-bold uppercase text-on-surface-variant">Estoque atual</span>
+            <input type="number" step="1" class="stock-current-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm font-bold" value="${stock}">
+          </label>
+          <div class="flex items-end">
+            <button type="button" class="stock-save-one-button h-touch-target-min w-full rounded-lg bg-primary text-sm font-bold text-on-primary" data-product-id="${product.id}">Salvar</button>
+          </div>
+        </div>
+        <div class="mt-2 flex flex-wrap items-end gap-2">
+          <label class="min-w-0 flex-1">
+            <span class="mb-1 block text-[11px] font-bold uppercase text-on-surface-variant">Adicionar (+)</span>
+            <input type="number" step="1" min="0" placeholder="10" class="stock-add-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm" value="">
+          </label>
+          <button type="button" class="stock-add-button h-touch-target-min shrink-0 rounded-lg border border-outline-variant bg-surface-container-high px-4 text-lg font-bold text-primary" title="Somar ao estoque" data-product-id="${product.id}">+</button>
+        </div>
+        <div class="mt-2 flex flex-wrap items-end gap-2">
+          <label class="min-w-0 flex-1">
+            <span class="mb-1 block text-[11px] font-bold uppercase text-on-surface-variant">Definir total</span>
+            <input type="number" step="1" min="0" placeholder="30" class="stock-set-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm" value="">
+          </label>
+          <button type="button" class="stock-set-button h-touch-target-min shrink-0 rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs font-bold text-on-surface" data-product-id="${product.id}">Definir</button>
+        </div>
+      </li>`;
+    })
+    .join("");
+}
+
+async function saveStockForProductId(productId, quantity) {
+  const qty = Math.trunc(Number(quantity));
+  if (Number.isNaN(qty)) return false;
+  setProductStockLocal(productId, qty);
+  try {
+    await setProductStockRemote(productId, qty);
+    return true;
+  } catch (e) {
+    console.error("[JANA] saveStock", e);
+    return false;
+  }
+}
+
+async function applyStockIncrementFromRow(rowEl) {
+  const productId = rowEl?.dataset?.productId;
+  if (!productId) return false;
+  const addInput = rowEl.querySelector(".stock-add-input");
+  const addVal = Math.trunc(Number(addInput?.value));
+  if (!addVal || Number.isNaN(addVal)) return false;
+  const next = getProductStock(productId) + addVal;
+  setProductStockLocal(productId, next);
+  try {
+    await adjustProductStockRemote(productId, addVal);
+    if (addInput) addInput.value = "";
+    const currentInput = rowEl.querySelector(".stock-current-input");
+    if (currentInput) currentInput.value = String(next);
+    return true;
+  } catch (e) {
+    console.error("[JANA] stock increment", e);
+    return false;
+  }
+}
+
+function bindStockAdminInteractionsOnce() {
+  const list = refs.stockProductsList;
+  if (!list || list.dataset.boundStock === "1") return;
+  list.dataset.boundStock = "1";
+
+  list.addEventListener("click", (e) => {
+    const row = e.target.closest(".stock-product-row");
+    if (!row) return;
+    const productId = row.dataset.productId;
+
+    if (e.target.closest(".stock-save-one-button")) {
+      void (async () => {
+        const input = row.querySelector(".stock-current-input");
+        const ok = await saveStockForProductId(productId, input?.value);
+        if (refs.stockAdminFeedback) {
+          refs.stockAdminFeedback.textContent = ok ? "Estoque salvo." : "Nao foi possivel salvar o estoque.";
+          refs.stockAdminFeedback.className = ok
+            ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
+            : "mt-2 min-h-[1rem] text-xs text-error";
+        }
+      })();
+      return;
+    }
+
+    if (e.target.closest(".stock-add-button")) {
+      void (async () => {
+        const ok = await applyStockIncrementFromRow(row);
+        if (refs.stockAdminFeedback) {
+          refs.stockAdminFeedback.textContent = ok ? "Unidades adicionadas." : "Informe um valor em Adicionar (+).";
+          refs.stockAdminFeedback.className = ok
+            ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
+            : "mt-2 min-h-[1rem] text-xs text-error";
+        }
+      })();
+      return;
+    }
+
+    if (e.target.closest(".stock-set-button")) {
+      void (async () => {
+        const setInput = row.querySelector(".stock-set-input");
+        const raw = setInput?.value;
+        if (raw === "" || raw == null) {
+          if (refs.stockAdminFeedback) {
+            refs.stockAdminFeedback.textContent = "Informe o total em Definir total.";
+            refs.stockAdminFeedback.className = "mt-2 min-h-[1rem] text-xs text-error";
+          }
+          return;
+        }
+        const ok = await saveStockForProductId(productId, raw);
+        if (ok) {
+          const currentInput = row.querySelector(".stock-current-input");
+          if (currentInput) currentInput.value = String(Math.trunc(Number(raw) || 0));
+          if (setInput) setInput.value = "";
+        }
+        if (refs.stockAdminFeedback) {
+          refs.stockAdminFeedback.textContent = ok ? "Total definido." : "Nao foi possivel definir o estoque.";
+          refs.stockAdminFeedback.className = ok
+            ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
+            : "mt-2 min-h-[1rem] text-xs text-error";
+        }
+      })();
+    }
+  });
+
+  refs.stockSaveAllButton?.addEventListener("click", () => {
+    void (async () => {
+      const rows = [...list.querySelectorAll(".stock-product-row")];
+      let saved = 0;
+      for (const row of rows) {
+        const productId = row.dataset.productId;
+        const input = row.querySelector(".stock-current-input");
+        if (await saveStockForProductId(productId, input?.value)) saved += 1;
+      }
+      if (refs.stockAdminFeedback) {
+        refs.stockAdminFeedback.textContent =
+          saved === rows.length
+            ? `Estoque de ${saved} produto(s) salvo.`
+            : `Salvos ${saved} de ${rows.length}. Verifique a conexao.`;
+        refs.stockAdminFeedback.className =
+          saved === rows.length
+            ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
+            : "mt-2 min-h-[1rem] text-xs text-error";
+      }
+    })();
   });
 }
 
@@ -2177,10 +2423,13 @@ function renderOrderDetails() {
   refs.availableProductsList.innerHTML = filteredProducts.length
     ? filteredProducts
       .map((product) => `
-        <li class="rounded-xl border border-slate-200 p-2">
-          <p class="text-sm font-semibold">${product.name}</p>
-          <p class="text-xs text-slate-500">${product.category} • ${formatCurrency(product.price)}</p>
-          <button type="button" class="add-product-button mt-2 h-10 w-full select-none rounded-lg bg-brand-700 text-sm font-semibold text-white shadow-sm" data-product-id="${product.id}">Adicionar</button>
+        <li class="rounded-xl border border-outline-variant/80 bg-surface-container-lowest/50 p-2">
+          <div class="flex items-start justify-between gap-2">
+            <p class="min-w-0 flex-1 text-sm font-semibold leading-snug text-on-surface">${product.name}</p>
+            ${formatProductStockHint(product.stock)}
+          </div>
+          <p class="mt-0.5 text-xs text-on-surface-variant">${product.category} • ${formatCurrency(product.price)}</p>
+          <button type="button" class="add-product-button mt-2 h-10 w-full select-none rounded-lg bg-primary text-sm font-semibold text-on-primary shadow-sm" data-product-id="${product.id}">Adicionar</button>
         </li>
       `)
       .join("")
@@ -2549,6 +2798,7 @@ function renderAll() {
   renderView();
   renderDashboard();
   renderProductAdmin();
+  renderStockAdmin();
   if (state.selectedTab === "reportsTab") {
     renderReports();
   }
@@ -2567,7 +2817,7 @@ async function openDetailDialog(orderId, options = {}) {
   const status = row ? normalizeOrderStatus(row.status) : "Aberta";
   if (status === "Aberta" && !(await ensureOpenShiftAuto())) return;
 
-  state.pendingNewOrder = null;
+  if (isPendingLocalOrder()) abandonPendingOrder();
   state.selectedOrderId = orderId;
   state.productSearch = "";
   state.selectedCategory = "Todas";
@@ -2589,7 +2839,7 @@ async function openDetailDialog(orderId, options = {}) {
 async function beginFinalizeFlowForOrderId(orderId) {
   if (!(await ensureOpenShiftAuto())) return;
 
-  state.pendingNewOrder = null;
+  if (isPendingLocalOrder()) abandonPendingOrder();
   state.selectedOrderId = orderId;
   const order = loadOrders().find((entry) => String(entry.id) === String(orderId));
   if (!order || !order.items?.length) return;
@@ -2663,6 +2913,7 @@ async function addItemToOrder(productId) {
       }
       order.everHadItems = true;
       order.status = deriveOrderStatus(order);
+      applyStockDeltaSilently(product.id, -1);
       try {
         await persistPendingOrderToServer();
       } catch (_) {
@@ -2700,6 +2951,7 @@ async function addItemToOrder(productId) {
   }
   order.everHadItems = true;
   order.status = deriveOrderStatus(order);
+  applyStockDeltaSilently(product.id, -1);
   saveOrders(orders);
   renderDashboard();
   renderOrderDetails();
@@ -2729,6 +2981,9 @@ function changeItemQty(itemIndex, delta) {
     if (item.qty <= 0) {
       order.items.splice(itemIndex, 1);
     }
+  }
+  if (delta !== 0 && item.productId) {
+    applyStockDeltaSilently(item.productId, -delta);
   }
   order.status = deriveOrderStatus(order);
 
@@ -2953,8 +3208,7 @@ function bindEvents() {
         state.currentView = "main";
         state.detailAction = null;
         state.cancelConfirmOpen = false;
-        state.pendingNewOrder = null;
-        if (state.selectedOrderId === PENDING_ORDER_ID) state.selectedOrderId = null;
+        if (isPendingLocalOrder()) abandonPendingOrder();
       }
       if (state.selectedTab === "settingsTab") {
         state.selectedSettingsTab = "products";
@@ -3073,8 +3327,7 @@ function bindEvents() {
     state.currentView = "main";
     state.detailAction = null;
     state.cancelConfirmOpen = false;
-    state.pendingNewOrder = null;
-    if (state.selectedOrderId === PENDING_ORDER_ID) state.selectedOrderId = null;
+    if (isPendingLocalOrder()) abandonPendingOrder();
     renderView();
   });
 
@@ -3092,8 +3345,7 @@ function bindEvents() {
       if (state.config.useTables && refs.orderTableInput) {
         state.pendingNewOrder.table = refs.orderTableInput.value.trim();
       }
-      state.pendingNewOrder = null;
-      state.selectedOrderId = null;
+      abandonPendingOrder();
       state.currentView = "main";
       state.detailAction = null;
       state.cancelConfirmOpen = false;
@@ -3160,8 +3412,7 @@ function bindEvents() {
 
   refs.confirmCancelOrderButton.addEventListener("click", async () => {
     if (isPendingLocalOrder()) {
-      state.pendingNewOrder = null;
-      state.selectedOrderId = null;
+      abandonPendingOrder();
       state.cancelConfirmOpen = false;
       state.currentView = "main";
       state.detailAction = null;
@@ -3186,6 +3437,7 @@ function bindEvents() {
       orders.splice(targetIndex, 1);
       state.cache.commandas = orders;
     } else {
+      restoreOrderItemsToStock(target.items);
       target.status = "Cancelada";
       target.canceledAt = new Date().toISOString();
       saveOrders(orders);
@@ -3274,11 +3526,12 @@ function bindEvents() {
         target.requiresPrep = productData.requiresPrep;
       }
     } else {
-      const newProduct = { ...productData, id: crypto.randomUUID() };
+      const newProduct = { ...productData, id: crypto.randomUUID(), stock: 0 };
       products.unshift(newProduct);
       void (async () => {
         try {
           await upsertProductRemote(newProduct);
+          await ensureProductStockRowRemote(newProduct.id);
           saveProducts(products);
           renderAll();
         } catch (e) {
@@ -3408,6 +3661,7 @@ function bindEvents() {
   });
 
   bindAddProductListInteractionsOnce();
+  bindStockAdminInteractionsOnce();
 }
 
 /** iOS Safari ainda dispara double-tap zoom mesmo com viewport maximum-scale=1. Bloqueia. */
