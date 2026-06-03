@@ -491,7 +491,7 @@
       -webkit-overflow-scrolling: touch;
     }
 
-    .available-products-scroll > li {
+    .available-products-scroll>li {
       min-height: var(--product-picker-row);
       box-sizing: border-box;
     }
@@ -697,7 +697,7 @@
               <button data-settings-tab="products"
                 class="settings-tab-button h-10 shrink-0 rounded-full bg-primary-container px-3 text-xs font-bold text-on-primary-container">Produtos</button>
               <button data-settings-tab="inventory"
-                class="settings-tab-button h-10 shrink-0 rounded-full bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant">Controle de Estoque</button>
+                class="settings-tab-button h-10 shrink-0 rounded-full bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant">Estoque</button>
               <button data-settings-tab="operation"
                 class="settings-tab-button h-10 shrink-0 rounded-full bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant">Operacao</button>
               <button data-settings-tab="categories"
@@ -758,8 +758,8 @@
                 <div id="productAdminCategoryTabsLeftHint" class="settings-tabs-hint settings-tabs-hint-left">
                   <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_left</span>
                 </div>
-                <div id="productAdminCategoryButtons"
-                  class="settings-tabs-scroll flex gap-2 overflow-x-auto pb-1"></div>
+                <div id="productAdminCategoryButtons" class="settings-tabs-scroll flex gap-2 overflow-x-auto pb-1">
+                </div>
                 <div id="productAdminCategoryTabsRightHint" class="settings-tabs-hint settings-tabs-hint-right">
                   <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_right</span>
                 </div>
@@ -771,9 +771,11 @@
           <div id="inventorySettingsPanel"
             class="settings-panel mt-stack-md hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
             <p class="text-sm font-bold text-on-surface">Controle de Estoque</p>
-            <p class="mt-1 text-xs text-on-surface-variant">Ajuste o estoque atual, some unidades (+) ou defina o total. Vendas debitam e cancelamentos de item devolvem automaticamente.</p>
+            <p class="mt-1 text-xs text-on-surface-variant">Ajuste o estoque atual, some unidades (+) ou defina o total.
+              Vendas debitam e cancelamentos de item devolvem automaticamente.</p>
             <button id="stockSaveAllButton" type="button"
-              class="mt-stack-sm h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Salvar todos</button>
+              class="mt-stack-sm h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Salvar
+              todos</button>
             <p id="stockAdminFeedback" class="mt-2 min-h-[1rem] text-xs text-on-surface-variant"></p>
             <ul id="stockProductsList" class="mt-stack-md space-y-stack-sm"></ul>
           </div>
@@ -793,7 +795,8 @@
               <input id="serviceFeeToggle" type="checkbox"
                 class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
             </label>
-            <p class="mt-2 text-xs text-on-surface-variant">O caixa abre e fecha quando voce decidir (botao no Inicio e fechamento em Relatorios). Nao ha horario fixo.</p>
+            <p class="mt-2 text-xs text-on-surface-variant">O caixa abre e fecha quando voce decidir (botao no Inicio e
+              fechamento em Relatorios). Nao ha horario fixo.</p>
           </div>
 
           <div id="categoriesSettingsPanel"
@@ -828,9 +831,12 @@
             <p class="text-sm font-bold text-on-surface">Reabrir caixa</p>
             <p class="mt-1 text-xs text-on-surface-variant">Desfaz o <strong>ultimo fechamento</strong> e coloca esse
               mesmo caixa como aberto de novo. So funciona com nenhum outro caixa aberto.</p>
-            <div id="reopenShiftSummary" class="mt-stack-sm rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant"></div>
+            <div id="reopenShiftSummary"
+              class="mt-stack-sm rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant">
+            </div>
             <button id="reopenShiftUndoButton" type="button"
-              class="mt-stack-sm h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Desfazer ultimo fechamento</button>
+              class="mt-stack-sm h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Desfazer
+              ultimo fechamento</button>
             <p id="reopenShiftFeedback" class="mt-2 min-h-[1rem] text-xs text-on-surface-variant"></p>
             <hr class="my-stack-md border-outline-variant">
             <p class="text-sm font-bold text-on-surface">Reabrir comanda</p>
