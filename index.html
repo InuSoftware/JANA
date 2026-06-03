@@ -463,6 +463,15 @@
       background: linear-gradient(to left, var(--bg-background), transparent);
     }
 
+  /* Filtros de categoria dentro dos cards de configuracao (fundo surface-lowest) */
+    .settings-tabs-wrap--panel .settings-tabs-hint-left {
+      background: linear-gradient(to right, var(--bg-surface-lowest), transparent);
+    }
+
+    .settings-tabs-wrap--panel .settings-tabs-hint-right {
+      background: linear-gradient(to left, var(--bg-surface-lowest), transparent);
+    }
+
     /* Estilo parecido com botão nativo iOS: highlight só enquanto o dedo está em cima */
     .add-product-button {
       cursor: pointer;
@@ -754,7 +763,7 @@
             </form>
             <div class="mt-stack-sm">
               <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Filtrar por categoria</span>
-              <div class="settings-tabs-wrap">
+              <div class="settings-tabs-wrap settings-tabs-wrap--panel">
                 <div id="productAdminCategoryTabsLeftHint" class="settings-tabs-hint settings-tabs-hint-left">
                   <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_left</span>
                 </div>
@@ -774,6 +783,19 @@
             <p class="mt-1 text-xs text-on-surface-variant">Em <strong>Estoque atual</strong>, digite o total e use
               Salvar. Em <strong>Adicionar (+)</strong>, some unidades ao que ja existe. Vendas debitam e cancelamentos
               de item devolvem automaticamente.</p>
+            <div class="mt-stack-sm">
+              <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Filtrar por categoria</span>
+              <div class="settings-tabs-wrap settings-tabs-wrap--panel">
+                <div id="stockAdminCategoryTabsLeftHint" class="settings-tabs-hint settings-tabs-hint-left">
+                  <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_left</span>
+                </div>
+                <div id="stockAdminCategoryButtons" class="settings-tabs-scroll flex gap-2 overflow-x-auto pb-1">
+                </div>
+                <div id="stockAdminCategoryTabsRightHint" class="settings-tabs-hint settings-tabs-hint-right">
+                  <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_right</span>
+                </div>
+              </div>
+            </div>
             <button id="stockSaveAllButton" type="button"
               class="mt-stack-sm h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Salvar
               todos</button>

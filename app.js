@@ -980,6 +980,7 @@ const state = {
   selectedSettingsTab: "products",
   selectedCategory: "Todas",
   productAdminCategoryFilter: "Todas",
+  stockAdminCategoryFilter: "Todas",
   productSearch: "",
   detailAction: null,
   cancelConfirmOpen: false,
@@ -1116,6 +1117,9 @@ const refs = {
   stockProductsList: document.querySelector("#stockProductsList"),
   stockSaveAllButton: document.querySelector("#stockSaveAllButton"),
   stockAdminFeedback: document.querySelector("#stockAdminFeedback"),
+  stockAdminCategoryButtons: document.querySelector("#stockAdminCategoryButtons"),
+  stockAdminCategoryTabsLeftHint: document.querySelector("#stockAdminCategoryTabsLeftHint"),
+  stockAdminCategoryTabsRightHint: document.querySelector("#stockAdminCategoryTabsRightHint"),
   productAdminCategoryButtons: document.querySelector("#productAdminCategoryButtons"),
   productAdminCategoryTabsLeftHint: document.querySelector("#productAdminCategoryTabsLeftHint"),
   productAdminCategoryTabsRightHint: document.querySelector("#productAdminCategoryTabsRightHint"),
@@ -1341,44 +1345,55 @@ function applyTheme() {
   }
 }
 
-function updateSettingsTabsHints() {
-  if (!refs.settingsTabsScroll || !refs.settingsTabsLeftHint || !refs.settingsTabsRightHint) return;
-  const scroller = refs.settingsTabsScroll;
-  const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-  const hasOverflow = maxScrollLeft > 2;
-  const showLeft = hasOverflow && scroller.scrollLeft > 4;
-  const showRight = hasOverflow && scroller.scrollLeft < (maxScrollLeft - 4);
-  refs.settingsTabsLeftHint.classList.toggle("show", showLeft);
-  refs.settingsTabsRightHint.classList.toggle("show", showRight);
-}
-
-function updateCategoryTabsHints() {
-  if (!refs.categoryTabsScroll || !refs.categoryTabsLeftHint || !refs.categoryTabsRightHint) return;
-  const content = refs.categoryButtons;
-  if (!content) return;
-  const maxScrollLeft = Math.max(0, content.scrollWidth - content.clientWidth);
-  const hasOverflow = maxScrollLeft > 2;
-  const showLeft = hasOverflow && content.scrollLeft > 4;
-  const showRight = hasOverflow && content.scrollLeft < (maxScrollLeft - 4);
-  refs.categoryTabsLeftHint.classList.toggle("show", showLeft);
-  refs.categoryTabsRightHint.classList.toggle("show", showRight);
-}
-
-function updateProductAdminCategoryTabsHints() {
-  if (
-    !refs.productAdminCategoryButtons ||
-    !refs.productAdminCategoryTabsLeftHint ||
-    !refs.productAdminCategoryTabsRightHint
-  ) {
-    return;
-  }
-  const scroller = refs.productAdminCategoryButtons;
+function updateHorizontalScrollHints(scroller, leftHint, rightHint) {
+  if (!scroller || !leftHint || !rightHint) return;
   const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
   const hasOverflow = maxScrollLeft > 2;
   const showLeft = hasOverflow && scroller.scrollLeft > 4;
   const showRight = hasOverflow && scroller.scrollLeft < maxScrollLeft - 4;
-  refs.productAdminCategoryTabsLeftHint.classList.toggle("show", showLeft);
-  refs.productAdminCategoryTabsRightHint.classList.toggle("show", showRight);
+  leftHint.classList.toggle("show", showLeft);
+  rightHint.classList.toggle("show", showRight);
+}
+
+/** Mede overflow depois do layout (painel visivel, botoes renderizados). */
+function scheduleHorizontalScrollHints(updateFn) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(updateFn);
+  });
+}
+
+function updateSettingsTabsHints() {
+  updateHorizontalScrollHints(refs.settingsTabsScroll, refs.settingsTabsLeftHint, refs.settingsTabsRightHint);
+}
+
+function updateCategoryTabsHints() {
+  if (!refs.categoryTabsScroll || !refs.categoryTabsLeftHint || !refs.categoryTabsRightHint) return;
+  updateHorizontalScrollHints(refs.categoryButtons, refs.categoryTabsLeftHint, refs.categoryTabsRightHint);
+}
+
+function updateProductAdminCategoryTabsHints() {
+  updateHorizontalScrollHints(
+    refs.productAdminCategoryButtons,
+    refs.productAdminCategoryTabsLeftHint,
+    refs.productAdminCategoryTabsRightHint
+  );
+}
+
+function updateStockAdminCategoryTabsHints() {
+  updateHorizontalScrollHints(
+    refs.stockAdminCategoryButtons,
+    refs.stockAdminCategoryTabsLeftHint,
+    refs.stockAdminCategoryTabsRightHint
+  );
+}
+
+function refreshSettingsCategoryFilterHints() {
+  if (state.selectedSettingsTab === "products") {
+    scheduleHorizontalScrollHints(updateProductAdminCategoryTabsHints);
+  }
+  if (state.selectedSettingsTab === "inventory") {
+    scheduleHorizontalScrollHints(updateStockAdminCategoryTabsHints);
+  }
 }
 
 function isPendingLocalOrder() {
@@ -2029,6 +2044,8 @@ function renderSettings() {
       : "settings-tab-button h-10 flex-1 rounded-full bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant";
   });
   updateSettingsTabsHints();
+  scheduleHorizontalScrollHints(updateSettingsTabsHints);
+  refreshSettingsCategoryFilterHints();
 
   refs.tableModeToggle.checked = !!state.config.useTables;
   refs.serviceFeeToggle.checked = !!state.config.useServiceFee;
@@ -2133,7 +2150,7 @@ function renderProductAdminCategoryFilters() {
       </button>`
     )
     .join("");
-  updateProductAdminCategoryTabsHints();
+  refreshSettingsCategoryFilterHints();
 }
 
 function renderProductAdmin() {
@@ -2181,14 +2198,43 @@ function renderProductAdmin() {
   });
 }
 
+function renderStockAdminCategoryFilters() {
+  if (!refs.stockAdminCategoryButtons) return;
+  const categories = productCategoryFilterOptions();
+  if (!categories.includes(state.stockAdminCategoryFilter)) {
+    state.stockAdminCategoryFilter = "Todas";
+  }
+  refs.stockAdminCategoryButtons.innerHTML = categories
+    .map(
+      (category) => `
+      <button type="button" class="stock-admin-category-filter h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.stockAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
+        ${category}
+      </button>`
+    )
+    .join("");
+  refreshSettingsCategoryFilterHints();
+}
+
 function renderStockAdmin() {
   if (!refs.stockProductsList) return;
-  const products = loadProducts().slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  if (!products.length) {
+  renderStockAdminCategoryFilters();
+  const allProducts = loadProducts().slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  const products = allProducts.filter(
+    (product) =>
+      state.stockAdminCategoryFilter === "Todas" || product.category === state.stockAdminCategoryFilter
+  );
+
+  if (!allProducts.length) {
     refs.stockProductsList.innerHTML =
       "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto cadastrado.</li>";
     return;
   }
+
+  if (!products.length) {
+    refs.stockProductsList.innerHTML = `<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto em "${state.stockAdminCategoryFilter}".</li>`;
+    return;
+  }
+
   refs.stockProductsList.innerHTML = products
     .map((product) => {
       const stock = Math.trunc(Number(product.stock) || 0);
@@ -3279,15 +3325,18 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.selectedSettingsTab = button.dataset.settingsTab;
       renderSettings();
+      refreshSettingsCategoryFilterHints();
     });
   });
 
   refs.settingsTabsScroll?.addEventListener("scroll", updateSettingsTabsHints);
   refs.categoryButtons?.addEventListener("scroll", updateCategoryTabsHints);
   refs.productAdminCategoryButtons?.addEventListener("scroll", updateProductAdminCategoryTabsHints);
+  refs.stockAdminCategoryButtons?.addEventListener("scroll", updateStockAdminCategoryTabsHints);
   window.addEventListener("resize", updateSettingsTabsHints);
   window.addEventListener("resize", updateCategoryTabsHints);
   window.addEventListener("resize", updateProductAdminCategoryTabsHints);
+  window.addEventListener("resize", updateStockAdminCategoryTabsHints);
 
   refs.closeDetailDialogButton.addEventListener("click", () => {
     state.currentView = "main";
@@ -3520,6 +3569,13 @@ function bindEvents() {
     if (!button) return;
     state.productAdminCategoryFilter = button.dataset.category || "Todas";
     renderProductAdmin();
+  });
+
+  refs.stockAdminCategoryButtons?.addEventListener("click", (e) => {
+    const button = e.target.closest(".stock-admin-category-filter");
+    if (!button) return;
+    state.stockAdminCategoryFilter = button.dataset.category || "Todas";
+    renderStockAdmin();
   });
 
   refs.tableModeToggle.addEventListener("change", () => {
