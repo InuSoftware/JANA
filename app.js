@@ -2212,13 +2212,6 @@ function renderStockAdmin() {
           </label>
           <button type="button" class="stock-add-button h-touch-target-min shrink-0 rounded-lg border border-outline-variant bg-surface-container-high px-4 text-lg font-bold text-primary" title="Somar ao estoque" data-product-id="${product.id}">+</button>
         </div>
-        <div class="mt-2 flex flex-wrap items-end gap-2">
-          <label class="min-w-0 flex-1">
-            <span class="mb-1 block text-[11px] font-bold uppercase text-on-surface-variant">Definir total</span>
-            <input type="number" step="1" min="0" placeholder="30" class="stock-set-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm" value="">
-          </label>
-          <button type="button" class="stock-set-button h-touch-target-min shrink-0 rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs font-bold text-on-surface" data-product-id="${product.id}">Definir</button>
-        </div>
       </li>`;
     })
     .join("");
@@ -2286,33 +2279,6 @@ function bindStockAdminInteractionsOnce() {
         const ok = await applyStockIncrementFromRow(row);
         if (refs.stockAdminFeedback) {
           refs.stockAdminFeedback.textContent = ok ? "Unidades adicionadas." : "Informe um valor em Adicionar (+).";
-          refs.stockAdminFeedback.className = ok
-            ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
-            : "mt-2 min-h-[1rem] text-xs text-error";
-        }
-      })();
-      return;
-    }
-
-    if (e.target.closest(".stock-set-button")) {
-      void (async () => {
-        const setInput = row.querySelector(".stock-set-input");
-        const raw = setInput?.value;
-        if (raw === "" || raw == null) {
-          if (refs.stockAdminFeedback) {
-            refs.stockAdminFeedback.textContent = "Informe o total em Definir total.";
-            refs.stockAdminFeedback.className = "mt-2 min-h-[1rem] text-xs text-error";
-          }
-          return;
-        }
-        const ok = await saveStockForProductId(productId, raw);
-        if (ok) {
-          const currentInput = row.querySelector(".stock-current-input");
-          if (currentInput) currentInput.value = String(Math.trunc(Number(raw) || 0));
-          if (setInput) setInput.value = "";
-        }
-        if (refs.stockAdminFeedback) {
-          refs.stockAdminFeedback.textContent = ok ? "Total definido." : "Nao foi possivel definir o estoque.";
           refs.stockAdminFeedback.className = ok
             ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
             : "mt-2 min-h-[1rem] text-xs text-error";
