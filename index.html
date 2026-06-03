@@ -100,8 +100,52 @@
       font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
     }
 
+    .bottom-tab {
+      transition:
+        background-color 0.2s ease,
+        color 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .bottom-tab--active {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .bottom-tab .bottom-tab-icon {
+      font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 28;
+      color: var(--text-on-surface-variant);
+      transition:
+        color 0.2s ease,
+        font-variation-settings 0.2s ease;
+    }
+
     .bottom-tab--active .bottom-tab-icon {
-      font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24;
+      font-variation-settings: "FILL" 1, "wght" 600, "GRAD" 0, "opsz" 28;
+      color: var(--text-on-primary-container);
+    }
+
+    .header-settings-button {
+      transition:
+        background-color 0.2s ease,
+        color 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .header-settings-button--active {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .header-settings-button .header-settings-icon {
+      font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+      color: var(--text-on-surface-variant);
+      transition:
+        color 0.2s ease,
+        font-variation-settings 0.2s ease;
+    }
+
+    .header-settings-button--active .header-settings-icon {
+      font-variation-settings: "FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24;
+      color: var(--text-on-primary-container);
     }
 
     html,
@@ -169,6 +213,9 @@
 
     .app-shell-header {
       flex: 0 0 auto;
+      min-height: 3rem;
+      padding-top: 0.5rem;
+      padding-bottom: 0.75rem;
     }
 
     .app-shell-main {
@@ -582,7 +629,7 @@
 
     <section id="appScreen" class="app-shell hidden bg-background">
       <header id="appHeader"
-        class="app-shell-header z-40 mt-2 flex h-touch-target-min items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+        class="app-shell-header z-40 mt-2 flex items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
         <div class="flex items-center gap-stack-sm">
           <span class="material-symbols-rounded text-primary">restaurant_menu</span>
           <div>
@@ -591,10 +638,10 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button id="openSettingsButton"
-            class="flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface"
-            title="Configurações">
-            <span class="material-symbols-rounded text-[20px]">settings</span>
+          <button id="openSettingsButton" type="button"
+            class="header-settings-button flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface"
+            title="Configurações" aria-pressed="false">
+            <span class="header-settings-icon material-symbols-rounded text-[20px]" aria-hidden="true">settings</span>
           </button>
           <button id="logoutButton"
             class="h-11 rounded-lg border border-outline-variant px-4 text-sm font-bold text-on-surface">Sair</button>
@@ -898,7 +945,7 @@
           <button type="button" data-tab="reportsTab"
             class="bottom-tab flex flex-1 items-center justify-center rounded-[0.875rem] text-on-surface-variant transition hover:bg-surface-container-high/60"
             title="Relatórios" aria-label="Relatórios" aria-selected="false">
-            <span class="bottom-tab-icon material-symbols-rounded text-[28px] leading-none">monitoring</span>
+            <span class="bottom-tab-icon material-symbols-rounded text-[28px] leading-none" aria-hidden="true">bar_chart</span>
           </button>
         </div>
       </nav>

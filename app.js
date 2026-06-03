@@ -1957,7 +1957,14 @@ function renderDashboard() {
         : status === "Cancelada"
           ? "bg-error-container text-error"
           : "bg-primary-fixed text-on-primary-fixed-variant";
-      const isLocked = status === "Finalizado" || status === "Cancelada";
+      const isViewOnly = status === "Finalizado" || status === "Cancelada";
+      const canFinalize = status === "Aberta" && order.items?.length;
+      const actionButtons = isViewOnly
+        ? `<button type="button" class="order-view-button mt-3 h-touch-target-min w-full rounded-xl bg-primary text-sm font-bold text-on-primary" data-order-id="${order.id}">Visualizar</button>`
+        : `<div class="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" class="order-open-button h-touch-target-min w-full rounded-xl bg-primary text-sm font-bold text-on-primary" data-order-id="${order.id}">Abrir</button>
+            <button type="button" class="order-finalize-button h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface text-sm font-bold text-primary ${canFinalize ? "" : "opacity-50"}" data-order-id="${order.id}" ${canFinalize ? "" : "disabled"}>Finalizar</button>
+          </div>`;
       return `
         <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm">
           <div class="flex items-start justify-between">
@@ -1968,16 +1975,13 @@ function renderDashboard() {
             <span class="rounded-lg px-2 py-1 text-xs font-semibold ${badgeColor}">${status}</span>
           </div>
           <p class="mt-3 text-sm font-extrabold text-primary">${formatCurrency(subtotal)}</p>
-          <div class="mt-3 grid grid-cols-2 gap-2">
-            <button class="order-open-button h-touch-target-min w-full rounded-xl bg-primary text-sm font-bold text-on-primary ${isLocked ? "opacity-50" : ""}" data-order-id="${order.id}" ${isLocked ? "disabled" : ""}>Abrir</button>
-            <button class="order-finalize-button h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface text-sm font-bold text-primary ${isLocked || status !== "Aberta" || !order.items?.length ? "opacity-50" : ""}" data-order-id="${order.id}" ${isLocked || status !== "Aberta" || !order.items?.length ? "disabled" : ""}>Finalizar</button>
-          </div>
+          ${actionButtons}
         </li>
       `;
     })
     .join("");
 
-  document.querySelectorAll(".order-open-button").forEach((button) => {
+  document.querySelectorAll(".order-open-button, .order-view-button").forEach((button) => {
     button.addEventListener("click", () => {
       void openDetailDialog(button.dataset.orderId);
     });
@@ -1985,6 +1989,15 @@ function renderDashboard() {
   document.querySelectorAll(".order-finalize-button").forEach((button) => {
     button.addEventListener("click", () => void beginFinalizeFlowForOrderId(button.dataset.orderId));
   });
+}
+
+function renderHeaderSettingsButton() {
+  if (!refs.openSettingsButton) return;
+  const settingsActive = state.currentView === "main" && state.selectedTab === "settingsTab";
+  refs.openSettingsButton.className = settingsActive
+    ? "header-settings-button header-settings-button--active flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant bg-primary-container text-on-primary-container transition"
+    : "header-settings-button flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface transition";
+  refs.openSettingsButton.setAttribute("aria-pressed", settingsActive ? "true" : "false");
 }
 
 function renderBottomTabs() {
@@ -1998,6 +2011,8 @@ function renderBottomTabs() {
       : "bottom-tab flex flex-1 items-center justify-center rounded-[0.875rem] text-on-surface-variant transition hover:bg-surface-container-high/60";
     tab.setAttribute("aria-selected", selected ? "true" : "false");
   });
+
+  renderHeaderSettingsButton();
 }
 
 function renderView() {
@@ -2394,10 +2409,19 @@ function renderOrderDetails() {
   refs.detailCustomerFeedback.textContent = "";
 
   const launchMode = state.detailAction === "add";
+  const status = normalizeOrderStatus(order.status);
+  const isLocked = status === "Finalizado" || status === "Cancelada";
   if (refs.detailCustomerHint) {
-    refs.detailCustomerHint.textContent = launchMode
-      ? "Depois de lançar os itens, informe o nome e use Confirmar."
-      : "Visualização da comanda — edite o nome aqui se precisar.";
+    if (isLocked) {
+      refs.detailCustomerHint.textContent =
+        status === "Finalizado"
+          ? "Comanda finalizada — apenas visualização."
+          : "Comanda cancelada — apenas visualização.";
+    } else {
+      refs.detailCustomerHint.textContent = launchMode
+        ? "Depois de lançar os itens, informe o nome e use Confirmar."
+        : "Visualização da comanda — edite o nome aqui se precisar.";
+    }
   }
   if (refs.detailCustomerSection && refs.detailCustomerSlotTop && refs.detailCustomerSlotBottom) {
     if (launchMode) {
@@ -2409,22 +2433,31 @@ function renderOrderDetails() {
     refs.detailCustomerSlotBottom.classList.toggle("hidden", !launchMode);
   }
 
-  const status = normalizeOrderStatus(order.status);
-  const isLocked = status === "Finalizado" || status === "Cancelada";
-
   if (refs.orderTableGroup) {
     refs.orderTableGroup.classList.toggle("hidden", !state.config.useTables);
   }
   if (refs.orderTableInput) {
     refs.orderTableInput.value = state.config.useTables ? order.table || "" : "";
     refs.orderTableInput.disabled = isLocked;
+    refs.orderTableInput.readOnly = isLocked;
   }
-  refs.addFlowContent.classList.toggle("hidden", state.detailAction !== "add");
+  if (refs.detailCustomerInput) {
+    refs.detailCustomerInput.disabled = isLocked;
+    refs.detailCustomerInput.readOnly = isLocked;
+  }
+  refs.saveCustomerButton?.classList.toggle("hidden", isLocked);
+  refs.confirmDetailButton?.classList.toggle("hidden", isLocked);
+  refs.addFlowContent.classList.toggle("hidden", state.detailAction !== "add" || isLocked);
   refs.cancelConfirmBox.classList.toggle("hidden", !state.cancelConfirmOpen);
-  refs.openCancelFlowButton.disabled = isLocked;
-  refs.openCancelFlowButton.className = isLocked
-    ? "mt-2 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-high text-sm font-bold text-on-surface-variant opacity-50"
-    : "mt-2 h-touch-target-min w-full rounded-xl border border-error-container bg-surface text-sm font-bold text-error shadow-sm transition";
+  refs.openCancelFlowButton.classList.toggle("hidden", isLocked);
+  if (!isLocked) {
+    refs.openCancelFlowButton.disabled = false;
+    refs.openCancelFlowButton.className =
+      "mt-2 h-touch-target-min w-full rounded-xl border border-error-container bg-surface text-sm font-bold text-error shadow-sm transition";
+  }
+  if (refs.productSearchInput) {
+    refs.productSearchInput.disabled = isLocked;
+  }
 
   const filteredProducts = products.filter((product) => {
     const byCategory = state.selectedCategory === "Todas" || product.category === state.selectedCategory;
@@ -2492,11 +2525,15 @@ function renderOrderDetails() {
                   ? `<button type="button" class="mark-delivered-button text-[11px] font-semibold text-primary underline decoration-primary/40 underline-offset-2" data-line-id="${item.lineId}">Entregue</button>`
                   : ""
               }
-              <div class="flex items-center gap-2">
-                <button class="qty-minus h-10 w-10 rounded-lg border border-slate-300 text-lg font-bold" data-index="${index}">-</button>
+              ${
+                isLocked
+                  ? `<span class="text-sm font-bold text-on-surface-variant">Qtd. ${item.qty}</span>`
+                  : `<div class="flex items-center gap-2">
+                <button type="button" class="qty-minus h-10 w-10 rounded-lg border border-slate-300 text-lg font-bold" data-index="${index}">-</button>
                 <span class="w-6 text-center text-sm font-bold">${item.qty}</span>
-                <button class="qty-plus h-10 w-10 rounded-lg border border-slate-300 text-lg font-bold" data-index="${index}">+</button>
-              </div>
+                <button type="button" class="qty-plus h-10 w-10 rounded-lg border border-slate-300 text-lg font-bold" data-index="${index}">+</button>
+              </div>`
+              }
             </div>
           </div>
         </li>`;
@@ -2504,7 +2541,19 @@ function renderOrderDetails() {
       .join("")
     : "<li class='rounded-xl border border-slate-200 p-3 text-sm text-slate-500'>Nenhum item lancado.</li>";
   refs.orderItemsList.innerHTML = itemsHtml;
-  refs.orderSubtotalLabel.textContent = `Subtotal: ${formatCurrency(calculateOrderSubtotal(order))}`;
+  let totalsLine = `Subtotal: ${formatCurrency(calculateOrderSubtotal(order))}`;
+  if (status === "Finalizado" && order.totalPaid != null) {
+    totalsLine += ` • Total pago: ${formatCurrency(order.totalPaid)}`;
+    const methods = Array.isArray(order.paymentMethods) ? order.paymentMethods.filter(Boolean) : [];
+    if (methods.length) totalsLine += ` • ${methods.join(", ")}`;
+  }
+  refs.orderSubtotalLabel.textContent = totalsLine;
+
+  if (isLocked) {
+    syncOrderLineTimerElements();
+    syncOrderItemsTimerInterval();
+    return;
+  }
 
   document.querySelectorAll(".add-product-button").forEach((button) => {
     if (button.dataset.bound === "1") return;
@@ -2827,7 +2876,8 @@ function renderAll() {
 async function openDetailDialog(orderId, options = {}) {
   const row = loadOrders().find((entry) => String(entry.id) === String(orderId));
   const status = row ? normalizeOrderStatus(row.status) : "Aberta";
-  if (status === "Aberta" && !(await ensureOpenShiftAuto())) return;
+  const isViewOnly = status === "Finalizado" || status === "Cancelada";
+  if (!isViewOnly && status === "Aberta" && !(await ensureOpenShiftAuto())) return;
 
   if (isPendingLocalOrder()) abandonPendingOrder();
   state.selectedOrderId = orderId;
