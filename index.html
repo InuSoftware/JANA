@@ -111,17 +111,50 @@
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     }
 
-    .bottom-tab .bottom-tab-icon {
-      font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 28;
-      color: var(--text-on-surface-variant);
-      transition:
-        color 0.2s ease,
-        font-variation-settings 0.2s ease;
+    /* Duas camadas (contorno + preenchido) com crossfade — mesmo efeito em Inicio e Relatorios */
+    .bottom-tab-icon-stack {
+      position: relative;
+      width: 1.75rem;
+      height: 1.75rem;
+      flex-shrink: 0;
     }
 
-    .bottom-tab--active .bottom-tab-icon {
+    .bottom-tab-icon-layer {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      line-height: 1;
+      transition:
+        opacity 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+        color 0.24s ease;
+    }
+
+    .bottom-tab-icon-layer--outline {
+      font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 28;
+      color: var(--text-on-surface-variant);
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .bottom-tab-icon-layer--filled {
       font-variation-settings: "FILL" 1, "wght" 600, "GRAD" 0, "opsz" 28;
       color: var(--text-on-primary-container);
+      opacity: 0;
+      transform: scale(0.86);
+    }
+
+    .bottom-tab--active .bottom-tab-icon-layer--outline {
+      opacity: 0;
+      transform: scale(0.86);
+    }
+
+    .bottom-tab--active .bottom-tab-icon-layer--filled {
+      opacity: 1;
+      transform: scale(1);
     }
 
     .header-settings-button {
@@ -940,12 +973,18 @@
           <button type="button" id="homeButton" data-tab="dashboardTab"
             class="bottom-tab bottom-tab--active flex flex-1 items-center justify-center rounded-[0.875rem] bg-primary-container text-on-primary-container transition"
             title="Início" aria-label="Início" aria-selected="true">
-            <span class="bottom-tab-icon material-symbols-rounded text-[28px] leading-none">space_dashboard</span>
+            <span class="bottom-tab-icon-stack" aria-hidden="true">
+              <span class="bottom-tab-icon-layer bottom-tab-icon-layer--outline material-symbols-rounded">space_dashboard</span>
+              <span class="bottom-tab-icon-layer bottom-tab-icon-layer--filled material-symbols-rounded">space_dashboard</span>
+            </span>
           </button>
           <button type="button" data-tab="reportsTab"
             class="bottom-tab flex flex-1 items-center justify-center rounded-[0.875rem] text-on-surface-variant transition hover:bg-surface-container-high/60"
             title="Relatórios" aria-label="Relatórios" aria-selected="false">
-            <span class="bottom-tab-icon material-symbols-rounded text-[28px] leading-none" aria-hidden="true">bar_chart</span>
+            <span class="bottom-tab-icon-stack" aria-hidden="true">
+              <span class="bottom-tab-icon-layer bottom-tab-icon-layer--outline material-symbols-rounded">analytics</span>
+              <span class="bottom-tab-icon-layer bottom-tab-icon-layer--filled material-symbols-rounded">analytics</span>
+            </span>
           </button>
         </div>
       </nav>

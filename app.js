@@ -2541,13 +2541,11 @@ function renderOrderDetails() {
       .join("")
     : "<li class='rounded-xl border border-slate-200 p-3 text-sm text-slate-500'>Nenhum item lancado.</li>";
   refs.orderItemsList.innerHTML = itemsHtml;
-  let totalsLine = `Subtotal: ${formatCurrency(calculateOrderSubtotal(order))}`;
   if (status === "Finalizado" && order.totalPaid != null) {
-    totalsLine += ` • Total pago: ${formatCurrency(order.totalPaid)}`;
-    const methods = Array.isArray(order.paymentMethods) ? order.paymentMethods.filter(Boolean) : [];
-    if (methods.length) totalsLine += ` • ${methods.join(", ")}`;
+    refs.orderSubtotalLabel.textContent = `Total pago: ${formatCurrency(order.totalPaid)}`;
+  } else {
+    refs.orderSubtotalLabel.textContent = `Subtotal: ${formatCurrency(calculateOrderSubtotal(order))}`;
   }
-  refs.orderSubtotalLabel.textContent = totalsLine;
 
   if (isLocked) {
     syncOrderLineTimerElements();
