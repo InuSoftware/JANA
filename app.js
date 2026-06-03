@@ -963,7 +963,7 @@ async function rollbackLastClosedShift() {
 const PENDING_ORDER_ID = "__pending__";
 let _pendingOrderPostChain = Promise.resolve();
 /** Botao Adicionar item: estado de pressao para feedback visual. */
-let addProductPressTarget = null;
+let globalButtonPressTarget = null;
 /** Atualiza cronometros na lista da comanda (1s) */
 let orderItemsTimerInterval = null;
 const THEME_PRESETS = {
@@ -1994,8 +1994,8 @@ function renderBottomTabs() {
   refs.bottomTabs.forEach((tab) => {
     const selected = tab.dataset.tab === state.selectedTab;
     tab.className = selected
-      ? "bottom-tab bottom-tab--active flex flex-1 items-center justify-center rounded-[0.875rem] bg-primary-container text-on-primary-container transition active:scale-[0.98]"
-      : "bottom-tab flex flex-1 items-center justify-center rounded-[0.875rem] text-on-surface-variant transition active:scale-[0.98] hover:bg-surface-container-high/60";
+      ? "bottom-tab bottom-tab--active flex flex-1 items-center justify-center rounded-[0.875rem] bg-primary-container text-on-primary-container transition"
+      : "bottom-tab flex flex-1 items-center justify-center rounded-[0.875rem] text-on-surface-variant transition hover:bg-surface-container-high/60";
     tab.setAttribute("aria-selected", selected ? "true" : "false");
   });
 }
@@ -2424,7 +2424,7 @@ function renderOrderDetails() {
   refs.openCancelFlowButton.disabled = isLocked;
   refs.openCancelFlowButton.className = isLocked
     ? "mt-2 h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-high text-sm font-bold text-on-surface-variant opacity-50"
-    : "mt-2 h-touch-target-min w-full rounded-xl border border-error-container bg-surface text-sm font-bold text-error shadow-sm transition active:scale-[0.98]";
+    : "mt-2 h-touch-target-min w-full rounded-xl border border-error-container bg-surface text-sm font-bold text-error shadow-sm transition";
 
   const filteredProducts = products.filter((product) => {
     const byCategory = state.selectedCategory === "Todas" || product.category === state.selectedCategory;
@@ -3071,30 +3071,35 @@ function deleteProduct(productId) {
   renderAll();
 }
 
-function bindAddProductListInteractionsOnce() {
-  const list = refs.availableProductsList;
-  if (!list || list.dataset.boundAddProduct === "1") return;
-  list.dataset.boundAddProduct = "1";
+/** Press feedback em todos os <button> (mesmo padrao do Adicionar na comanda). */
+function bindGlobalButtonPressFeedbackOnce() {
+  if (document.documentElement.dataset.globalButtonPress === "1") return;
+  document.documentElement.dataset.globalButtonPress = "1";
 
-  list.addEventListener("pointerdown", (e) => {
-    const btn = e.target.closest(".add-product-button");
-    if (!btn || !list.contains(btn)) return;
-    if (addProductPressTarget && addProductPressTarget !== btn) {
-      addProductPressTarget.classList.remove("is-pressed");
-    }
-    addProductPressTarget = btn;
-    btn.classList.add("is-pressed");
-  });
-
-  const releaseAddProductPress = () => {
-    if (addProductPressTarget) {
-      addProductPressTarget.classList.remove("is-pressed");
-      addProductPressTarget = null;
+  const release = () => {
+    if (globalButtonPressTarget) {
+      globalButtonPressTarget.classList.remove("is-pressed");
+      globalButtonPressTarget = null;
     }
   };
 
-  document.addEventListener("pointerup", releaseAddProductPress);
-  document.addEventListener("pointercancel", releaseAddProductPress);
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 0) return;
+      const btn = e.target.closest("button");
+      if (!btn || btn.disabled) return;
+      if (globalButtonPressTarget && globalButtonPressTarget !== btn) {
+        globalButtonPressTarget.classList.remove("is-pressed");
+      }
+      globalButtonPressTarget = btn;
+      btn.classList.add("is-pressed");
+    },
+    true
+  );
+
+  document.addEventListener("pointerup", release, true);
+  document.addEventListener("pointercancel", release, true);
 }
 
 function bindDetailCustomerViewportAssistOnce() {
@@ -3682,7 +3687,7 @@ function bindEvents() {
     }
   });
 
-  bindAddProductListInteractionsOnce();
+  bindGlobalButtonPressFeedbackOnce();
   bindStockAdminInteractionsOnce();
 }
 
