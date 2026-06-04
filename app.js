@@ -2154,11 +2154,10 @@ function renderSettings() {
   refs.serviceFeeToggle.checked = !!state.config.useServiceFee;
   refs.stockModeToggle.checked = isStockControlEnabled();
   refs.serviceFeeField?.classList.toggle("hidden", !state.config.useServiceFee);
-  refs.settingsTabInventoryButton?.classList.toggle("hidden", !isStockControlEnabled());
-  refs.productStockFeaturesWrap?.classList.toggle("hidden", !isStockControlEnabled());
   if (!isStockControlEnabled() && state.selectedSettingsTab === "inventory") {
     state.selectedSettingsTab = "operation";
   }
+  syncStockControlDependentUi();
   renderProductCategoryOptions();
 
   refs.categoriesList.innerHTML = (state.config.categories || [])
@@ -2285,7 +2284,7 @@ function renderProductAdmin() {
       <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm">
         <div class="flex items-start justify-between gap-2">
           <div>
-            <p class="text-sm font-bold text-primary">${product.name}${product.isSpecial ? ' <span class="text-[10px] font-bold uppercase text-secondary">Especial</span>' : ""}</p>
+            <p class="text-sm font-bold text-primary">${product.name}${product.isSpecial && isStockControlEnabled() ? ' <span class="text-[10px] font-bold uppercase text-secondary">Especial</span>' : ""}</p>
             <p class="text-xs text-on-surface-variant">${product.category}</p>
             <p class="mt-1 text-sm font-extrabold text-primary">${formatCurrency(product.price)}</p>
           </div>
@@ -2306,7 +2305,7 @@ function renderProductAdmin() {
     button.addEventListener("click", () => deleteProduct(button.dataset.productId));
   });
 
-  syncProductSpecialPanelVisibility();
+  syncStockControlDependentUi();
 }
 
 function renderStockAdminCategoryFilters() {
@@ -3225,13 +3224,42 @@ function renderProductSpecialPanel(editingProductId) {
   }
 }
 
+function syncStockControlDependentUi() {
+  const stockOn = isStockControlEnabled();
+  refs.settingsTabInventoryButton?.classList.toggle("hidden", !stockOn);
+  refs.productStockFeaturesWrap?.classList.toggle("hidden", !stockOn);
+  if (!stockOn) {
+    refs.productSpecialPanel?.classList.add("hidden");
+    return;
+  }
+  syncProductSpecialPanelVisibility();
+}
+
 function syncProductSpecialPanelVisibility() {
+  if (!isStockControlEnabled()) {
+    refs.productSpecialPanel?.classList.add("hidden");
+    return;
+  }
   const on = !!refs.productSpecialInput?.checked;
   refs.productSpecialPanel?.classList.toggle("hidden", !on);
   if (on) renderProductSpecialPanel();
 }
 
 function readProductSpecialFromForm() {
+  if (!isStockControlEnabled()) {
+    const editingId = String(refs.productIdInput?.value || "").trim();
+    if (editingId) {
+      const existing = findProductById(editingId);
+      if (existing) {
+        return {
+          isSpecial: !!existing.isSpecial,
+          stockComponentIds: normalizeStockComponentIds(existing),
+          stockDisplayProductId: existing.stockDisplayProductId || null
+        };
+      }
+    }
+    return { isSpecial: false, stockComponentIds: [], stockDisplayProductId: null };
+  }
   const isSpecial = !!refs.productSpecialInput?.checked;
   if (!isSpecial) {
     return { isSpecial: false, stockComponentIds: [], stockDisplayProductId: null };
@@ -3264,7 +3292,7 @@ function fillProductForm(productId) {
   refs.productRequiresPrepInput.checked = product.requiresPrep ?? categoryRequiresPrep(product.category);
   if (refs.productSpecialInput) refs.productSpecialInput.checked = !!product.isSpecial;
   renderProductSpecialPanel(product.id);
-  syncProductSpecialPanelVisibility();
+  syncStockControlDependentUi();
   refs.productSubmitButton.textContent = "Atualizar";
   refs.productNameInput.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -3782,12 +3810,6 @@ function bindEvents() {
       alert("Item especial: marque ao menos um insumo para debitar o estoque.");
       return;
     }
-    if (!isStockControlEnabled()) {
-      productData.isSpecial = false;
-      productData.stockComponentIds = [];
-      productData.stockDisplayProductId = null;
-    }
-
     if (refs.productIdInput.value) {
       const target = products.find((product) => String(product.id) === String(refs.productIdInput.value));
       if (target) {
@@ -4238,6 +4260,7 @@ if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
     fillProductForm,
     clearProductForm,
     renderProductSpecialPanel,
+    syncStockControlDependentUi,
     syncProductSpecialPanelVisibility,
     readProductSpecialFromForm,
     deleteCategory,

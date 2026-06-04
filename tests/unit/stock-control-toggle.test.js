@@ -127,6 +127,61 @@ describe("useStock na comanda", () => {
   });
 });
 
+describe("readProductSpecialFromForm com estoque desligado", () => {
+  let j;
+
+  beforeEach(() => {
+    j = loadJana();
+    seedProducts(j, [CHURRASCO, PAO, CACHORRO]);
+    j.state.config.useStock = false;
+    j.refs.productIdInput.value = CACHORRO.id;
+    j.refs.productSpecialInput.checked = false;
+  });
+
+  it("preserva configuracao do produto em edicao (nao apaga no salvar)", () => {
+    const special = j.readProductSpecialFromForm();
+    expect(special.isSpecial).toBe(true);
+    expect(special.stockComponentIds).toEqual([CHURRASCO.id, PAO.id]);
+    expect(special.stockDisplayProductId).toBe(PAO.id);
+  });
+
+  it("produto novo continua sem item especial", () => {
+    j.refs.productIdInput.value = "";
+    const special = j.readProductSpecialFromForm();
+    expect(special.isSpecial).toBe(false);
+    expect(special.stockComponentIds).toEqual([]);
+  });
+
+  it("regressao: atualizar nome com estoque off nao apaga item especial (fluxo do Salvar)", () => {
+    j.refs.productIdInput.value = CACHORRO.id;
+    j.refs.productSpecialInput.checked = false;
+
+    const products = j.loadProducts();
+    const target = products.find((p) => String(p.id) === String(CACHORRO.id));
+    const special = j.readProductSpecialFromForm();
+    const productData = {
+      name: "Cachorro-quente (teste renomeado)",
+      category: target.category,
+      price: target.price,
+      requiresPrep: target.requiresPrep,
+      isSpecial: special.isSpecial,
+      stockComponentIds: special.stockComponentIds,
+      stockDisplayProductId: special.stockDisplayProductId
+    };
+
+    target.name = productData.name;
+    target.isSpecial = productData.isSpecial;
+    target.stockComponentIds = productData.stockComponentIds;
+    target.stockDisplayProductId = productData.stockDisplayProductId;
+
+    expect(target.isSpecial).toBe(true);
+    expect(target.stockComponentIds).toEqual([CHURRASCO.id, PAO.id]);
+    expect(target.stockDisplayProductId).toBe(PAO.id);
+    expect(j.productToRow(target).is_special).toBe(true);
+    expect(j.productToRow(target).stock_component_ids).toEqual([CHURRASCO.id, PAO.id]);
+  });
+});
+
 describe("useStock ao religar controle", () => {
   let j;
 
