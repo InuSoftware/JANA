@@ -4616,6 +4616,33 @@ const MOBILE_FIELD_SELECTOR =
 const FIELD_SCROLL_MARGIN = 8;
 const KEYBOARD_INSET_MIN = 72;
 
+/**
+ * Perfis de teclado/scroll por plataforma (detectados no aparelho).
+ * Nao e configuracao do usuario — evita tela "voce usa iPhone ou Android?".
+ */
+const MOBILE_KEYBOARD_PROFILES = {
+  ios: {
+    scrollDelaysMs: [120, 320, 520, 820],
+    keyboardEstimateCapPx: 280,
+    keyboardEstimateRatio: 0.36,
+    /** Safari costuma reportar visualViewport; confiamos quando inset >= limiar. */
+    assumeKeyboardWhenFocused: false,
+  },
+  android: {
+    scrollDelaysMs: [120, 280, 480, 720, 920],
+    keyboardEstimateCapPx: 340,
+    keyboardEstimateRatio: 0.42,
+    /** Chrome + overlays-content: teclado cobre mas viewport quase nao muda. */
+    assumeKeyboardWhenFocused: true,
+  },
+  other: {
+    scrollDelaysMs: [120, 320, 600],
+    keyboardEstimateCapPx: 320,
+    keyboardEstimateRatio: 0.4,
+    assumeKeyboardWhenFocused: true,
+  },
+};
+
 function isLikelyIos() {
   return (
     /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
@@ -4623,17 +4650,44 @@ function isLikelyIos() {
   );
 }
 
-/** Android costuma demorar mais para atualizar visualViewport; iOS anima o teclado mais devagar. */
+function isLikelyAndroid() {
+  return /Android/i.test(navigator.userAgent);
+}
+
+/** @returns {"ios"|"android"|"other"} */
+function detectMobilePlatform() {
+  if (isLikelyIos()) return "ios";
+  if (isLikelyAndroid()) return "android";
+  return "other";
+}
+
+function getMobileKeyboardProfile() {
+  return MOBILE_KEYBOARD_PROFILES[detectMobilePlatform()];
+}
+
+function isEditableFieldFocused() {
+  const el = document.activeElement;
+  return el instanceof HTMLElement && el.matches(MOBILE_FIELD_SELECTOR);
+}
+
 function fieldScrollRetryDelaysMs() {
-  return isLikelyIos()
-    ? [120, 320, 520, 820]
-    : [120, 280, 480, 720, 920];
+  return getMobileKeyboardProfile().scrollDelaysMs;
 }
 
 function keyboardEstimatePx() {
-  const cap = isLikelyIos() ? 280 : 320;
-  const ratio = isLikelyIos() ? 0.36 : 0.4;
-  return Math.min(cap, Math.round(window.innerHeight * ratio));
+  const p = getMobileKeyboardProfile();
+  return Math.min(
+    p.keyboardEstimateCapPx,
+    Math.round(window.innerHeight * p.keyboardEstimateRatio),
+  );
+}
+
+/** Reserva faixa acima do teclado para rolagem interna (sem mover o app inteiro). */
+function shouldReserveSpaceForKeyboard() {
+  if (!isEditableFieldFocused()) return false;
+  const profile = getMobileKeyboardProfile();
+  if (profile.assumeKeyboardWhenFocused) return true;
+  return keyboardInsetPx() < KEYBOARD_INSET_MIN;
 }
 
 function keyboardInsetPx() {
@@ -4642,12 +4696,22 @@ function keyboardInsetPx() {
   return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
 }
 
-/** Faixa visivel na tela (intersecao com viewport + barra fixa, sem padding extra no layout). */
+/**
+ * Faixa visivel acima do teclado.
+ * Android + overlays-content: viewport quase nao encolhe — tratamos teclado aberto na mao.
+ */
 function getFieldVisibleBand() {
   const vv = window.visualViewport;
   const m = FIELD_SCROLL_MARGIN;
   let top = (vv?.offsetTop ?? 0) + m;
   let bottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - m;
+
+  if (shouldReserveSpaceForKeyboard()) {
+    bottom = Math.min(
+      bottom,
+      window.innerHeight - keyboardEstimatePx() - m,
+    );
+  }
 
   const nav = refs.appBottomNav;
   if (nav && !nav.classList.contains("hidden")) {
@@ -4659,14 +4723,12 @@ function getFieldVisibleBand() {
 }
 
 function scheduleFieldScrollIntoView(el) {
-  const run = (allowEstimate) => {
-    if (document.activeElement === el) scrollFocusedFieldIntoView(el, allowEstimate);
+  const run = () => {
+    if (document.activeElement === el) scrollFocusedFieldIntoView(el);
   };
-  run(false);
-  requestAnimationFrame(() => run(false));
-  fieldScrollRetryDelaysMs().forEach((ms) => {
-    setTimeout(() => run(ms >= 280), ms);
-  });
+  run();
+  requestAnimationFrame(run);
+  fieldScrollRetryDelaysMs().forEach((ms) => setTimeout(run, ms));
 }
 
 function findInputScrollRoot(el) {
@@ -4692,49 +4754,26 @@ function findInputScrollRoot(el) {
   return refs.mainContent || refs.loginScreen || null;
 }
 
-function scrollFocusedFieldIntoView(el, allowKeyboardEstimate = false) {
+function scrollFocusedFieldIntoView(el) {
   if (!el?.getBoundingClientRect) return;
 
   const root = findInputScrollRoot(el);
   if (!root) return;
 
-  const applyScroll = (band) => {
-    const rect = el.getBoundingClientRect();
-    if (rect.top >= band.top && rect.bottom <= band.bottom) return false;
-
-    let moved = false;
-    if (rect.bottom > band.bottom) {
-      root.scrollTop += rect.bottom - band.bottom;
-      moved = true;
-    }
-    if (rect.top < band.top) {
-      root.scrollTop -= band.top - rect.top;
-      moved = true;
-    }
-    return moved;
-  };
-
   const band = getFieldVisibleBand();
-  applyScroll(band);
+  const rect = el.getBoundingClientRect();
+  const rootRect = root.getBoundingClientRect();
 
-  if (!allowKeyboardEstimate) return;
+  const visibleTop = Math.max(band.top, rootRect.top);
+  const visibleBottom = Math.min(band.bottom, rootRect.bottom);
 
-  const inset = keyboardInsetPx();
-  if (inset >= KEYBOARD_INSET_MIN) return;
+  if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return;
 
-  const rectAfter = el.getBoundingClientRect();
-  const bandAfter = getFieldVisibleBand();
-  if (
-    rectAfter.top >= bandAfter.top &&
-    rectAfter.bottom <= bandAfter.bottom
-  ) {
-    return;
+  if (rect.bottom > visibleBottom) {
+    root.scrollTop += rect.bottom - visibleBottom;
   }
-
-  const estimate = keyboardEstimatePx();
-  const estBottom = window.innerHeight - estimate - FIELD_SCROLL_MARGIN;
-  if (rectAfter.bottom > estBottom) {
-    root.scrollTop += rectAfter.bottom - estBottom;
+  if (rect.top < visibleTop) {
+    root.scrollTop -= visibleTop - rect.top;
   }
 }
 
@@ -4745,7 +4784,7 @@ function bindMobileKeyboardScroll() {
     viewportScrollTimer = window.setTimeout(() => {
       const el = document.activeElement;
       if (!(el instanceof HTMLElement) || !el.matches(MOBILE_FIELD_SELECTOR)) return;
-      scrollFocusedFieldIntoView(el, true);
+      scrollFocusedFieldIntoView(el);
     }, 48);
   };
 
