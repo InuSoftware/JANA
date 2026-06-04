@@ -6,9 +6,10 @@
     typeof globalThis.crypto.getRandomValues === "function"
       ? (arr) => globalThis.crypto.getRandomValues(arr)
       : (arr) => {
-        for (let i = 0; i < arr.length; i++) arr[i] = (Math.random() * 256) & 0xff;
-        return arr;
-      };
+          for (let i = 0; i < arr.length; i++)
+            arr[i] = (Math.random() * 256) & 0xff;
+          return arr;
+        };
   globalThis.crypto.randomUUID = function () {
     const b = getRandomValues(new Uint8Array(16));
     b[6] = (b[6] & 0x0f) | 0x40;
@@ -40,15 +41,16 @@ let supabaseClient = null;
 async function getSupabase() {
   if (!isSupabaseConfigured()) return null;
   if (supabaseClient) return supabaseClient;
-  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const { createClient } =
+    await import("https://esm.sh/@supabase/supabase-js@2");
   const projectUrl = normalizeSupabaseProjectUrl(window.__SUPABASE_URL__);
   supabaseClient = createClient(projectUrl, window.__SUPABASE_ANON_KEY__, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storage: typeof window !== "undefined" ? window.localStorage : undefined
-    }
+      storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    },
   });
   return supabaseClient;
 }
@@ -73,13 +75,20 @@ function defaultConfigPayload() {
     useServiceFee: true,
     useStock: true,
     activeTheme: "blue-service",
-    categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
+    categories: [
+      "Bebidas",
+      "Lanches",
+      "Porcoes",
+      "Pratos",
+      "Sobremesas",
+      "Outros",
+    ],
     prepCategories: [],
     paymentMethods: [
       { id: "card", name: "Cartao", active: true },
       { id: "cash", name: "Dinheiro", active: true },
       { id: "pix", name: "PIX", active: true },
-      { id: "voucher", name: "Vale Ref.", active: true }
+      { id: "voucher", name: "Vale Ref.", active: true },
     ],
   };
 }
@@ -90,7 +99,9 @@ function normalizeStockComponentIds(productOrIds) {
       ? []
       : Array.isArray(productOrIds)
         ? productOrIds
-        : productOrIds.stockComponentIds ?? productOrIds.stock_component_ids ?? [];
+        : (productOrIds.stockComponentIds ??
+          productOrIds.stock_component_ids ??
+          []);
   const seen = new Set();
   const out = [];
   for (const id of raw) {
@@ -111,14 +122,18 @@ function productRowToApp(row, stockQty) {
     requiresPrep: row.requires_prep === true,
     isSpecial: row.is_special === true,
     stockComponentIds: normalizeStockComponentIds(row.stock_component_ids),
-    stockDisplayProductId: row.stock_display_product_id ? String(row.stock_display_product_id) : null,
-    stock: stockQty != null ? Math.trunc(Number(stockQty) || 0) : 0
+    stockDisplayProductId: row.stock_display_product_id
+      ? String(row.stock_display_product_id)
+      : null,
+    stock: stockQty != null ? Math.trunc(Number(stockQty) || 0) : 0,
   };
 }
 
 function productToRow(p) {
   const componentIds = normalizeStockComponentIds(p);
-  let displayId = p.stockDisplayProductId ? String(p.stockDisplayProductId) : null;
+  let displayId = p.stockDisplayProductId
+    ? String(p.stockDisplayProductId)
+    : null;
   if (displayId && !componentIds.includes(displayId)) displayId = null;
   return {
     id: p.id,
@@ -128,7 +143,7 @@ function productToRow(p) {
     requires_prep: p.requiresPrep === true,
     is_special: p.isSpecial === true,
     stock_component_ids: componentIds,
-    stock_display_product_id: displayId
+    stock_display_product_id: displayId,
   };
 }
 
@@ -161,12 +176,16 @@ function applyOrderLineStockDelta(product, delta) {
 }
 
 function getProductStock(productId) {
-  const product = loadProducts().find((entry) => String(entry.id) === String(productId));
+  const product = loadProducts().find(
+    (entry) => String(entry.id) === String(productId),
+  );
   return product ? Math.trunc(Number(product.stock) || 0) : 0;
 }
 
 function setProductStockLocal(productId, quantity) {
-  const product = loadProducts().find((entry) => String(entry.id) === String(productId));
+  const product = loadProducts().find(
+    (entry) => String(entry.id) === String(productId),
+  );
   if (product) product.stock = Math.trunc(Number(quantity) || 0);
 }
 
@@ -176,7 +195,9 @@ function applyStockDeltaSilently(productId, delta) {
   const d = Math.trunc(delta);
   if (!d) return;
   setProductStockLocal(productId, getProductStock(productId) + d);
-  void adjustProductStockRemote(productId, d).catch((e) => console.error("[JANA] estoque", e));
+  void adjustProductStockRemote(productId, d).catch((e) =>
+    console.error("[JANA] estoque", e),
+  );
 }
 
 function restoreOrderItemsToStock(items) {
@@ -219,7 +240,10 @@ function todayLocalYmdFromDate(d) {
 }
 
 function localDateFromYmd(ymd) {
-  const [y, m, day] = String(ymd || "").slice(0, 10).split("-").map((n) => parseInt(n, 10));
+  const [y, m, day] = String(ymd || "")
+    .slice(0, 10)
+    .split("-")
+    .map((n) => parseInt(n, 10));
   return new Date(y, (m || 1) - 1, day || 1);
 }
 
@@ -230,14 +254,18 @@ const WEEKDAY_FULL_PT = [
   "Quarta-feira",
   "Quinta-feira",
   "Sexta-feira",
-  "Sabado"
+  "Sabado",
 ];
 
 function formatYmdWithWeekday(ymd) {
   if (!ymd) return "";
   const d = localDateFromYmd(ymd);
   const label = WEEKDAY_FULL_PT[d.getDay()] || "";
-  const br = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const br = d.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
   return `${label}, ${br}`;
 }
 
@@ -248,7 +276,7 @@ function formatDateTimeShort(iso) {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
@@ -282,7 +310,7 @@ function dailyCloseRowToShiftLike(row) {
     activeOrdersCount: row.activeOrdersCount,
     totalBruto: row.totalBruto,
     finalizedOrdersCount: row.finalizedOrdersCount,
-    sales
+    sales,
   };
   return {
     id: `legacy-dc-${row.id}`,
@@ -294,7 +322,7 @@ function dailyCloseRowToShiftLike(row) {
     startedAt,
     endedAt,
     status: "fechado",
-    payload: { closeSnapshot, legacyDailyClose: true }
+    payload: { closeSnapshot, legacyDailyClose: true },
   };
 }
 
@@ -319,15 +347,21 @@ function loadAllClosedSessions() {
       (leg) =>
         !fromShifts.some((sh) =>
           isDuplicateOfShift(
-            { dateYmd: leg.referenceDate, closedAt: leg.endedAt, id: String(leg.id).replace(/^legacy-dc-/, "") },
-            sh
-          )
-        )
+            {
+              dateYmd: leg.referenceDate,
+              closedAt: leg.endedAt,
+              id: String(leg.id).replace(/^legacy-dc-/, ""),
+            },
+            sh,
+          ),
+        ),
     );
   return [...fromShifts, ...legacy].sort((a, b) => {
     const refCmp = (b.referenceDate || "").localeCompare(a.referenceDate || "");
     if (refCmp !== 0) return refCmp;
-    return new Date(b.endedAt || 0).getTime() - new Date(a.endedAt || 0).getTime();
+    return (
+      new Date(b.endedAt || 0).getTime() - new Date(a.endedAt || 0).getTime()
+    );
   });
 }
 
@@ -350,7 +384,7 @@ function shiftCloseReportSnapshot(shift) {
       totalBruto: Number(snap.totalBruto) || 0,
       finalizedOrdersCount: Number(snap.finalizedOrdersCount) || 0,
       activeOrdersCount: snap.activeOrdersCount,
-      sales: Array.isArray(snap.sales) ? snap.sales : []
+      sales: Array.isArray(snap.sales) ? snap.sales : [],
     };
   }
   const orders = loadOrders();
@@ -363,10 +397,15 @@ function shiftCloseReportSnapshot(shift) {
       orderId: order.id,
       customer: (order.customer || "").trim() || "Cliente sem nome",
       totalPaid: order.totalPaid || 0,
-      paymentMethods: Array.isArray(order.paymentMethods) ? order.paymentMethods : [],
-      itemsCount: (order.items || []).reduce((sum, item) => sum + (item.qty || 0), 0),
-      closedAt: order.closedAt || order.createdAt || null
-    }))
+      paymentMethods: Array.isArray(order.paymentMethods)
+        ? order.paymentMethods
+        : [],
+      itemsCount: (order.items || []).reduce(
+        (sum, item) => sum + (item.qty || 0),
+        0,
+      ),
+      closedAt: order.closedAt || order.createdAt || null,
+    })),
   };
 }
 
@@ -411,7 +450,7 @@ function renderShiftCloseReportCard(shift) {
                  <li class="flex justify-between text-xs">
                    <span>${row.name}</span>
                    <span class="font-bold text-primary">${formatCurrency(row.value)}</span>
-                 </li>`
+                 </li>`,
                  )
                  .join("")}
              </ul>`
@@ -428,7 +467,7 @@ function renderShiftCloseReportCard(shift) {
                    <span class="font-semibold text-on-surface">${sale.customer || "Cliente"}</span>
                    · ${formatCurrency(sale.totalPaid || 0)}
                    <span class="text-on-surface-variant"> · ${sale.itemsCount ?? 0} it.</span>
-                 </li>`
+                 </li>`,
                  )
                  .join("")}
              </ul>`
@@ -448,8 +487,10 @@ function shiftRowToApp(row) {
         ? row.reference_date.slice(0, 10)
         : String(row.reference_date).slice(0, 10)
       : "";
-  const schedStart = row.scheduled_start != null ? String(row.scheduled_start).slice(0, 5) : "";
-  const schedEnd = row.scheduled_end != null ? String(row.scheduled_end).slice(0, 5) : "";
+  const schedStart =
+    row.scheduled_start != null ? String(row.scheduled_start).slice(0, 5) : "";
+  const schedEnd =
+    row.scheduled_end != null ? String(row.scheduled_end).slice(0, 5) : "";
   return {
     id: row.id,
     referenceDate: ref,
@@ -460,7 +501,7 @@ function shiftRowToApp(row) {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     status: row.status === "fechado" ? "fechado" : "aberto",
-    payload: row.payload && typeof row.payload === "object" ? row.payload : {}
+    payload: row.payload && typeof row.payload === "object" ? row.payload : {},
   };
 }
 
@@ -475,7 +516,8 @@ function getOpenShift() {
 /** Turno criado pela versao antiga (18h–02h automatico), sem vendas nem comandas abertas depois. */
 function isLegacyAutoOpenShift(shift) {
   if (!shift || shift.status !== "aberto") return false;
-  if (shift.scheduledStart !== "18:00" || shift.scheduledEnd !== "02:00") return false;
+  if (shift.scheduledStart !== "18:00" || shift.scheduledEnd !== "02:00")
+    return false;
   const payload = shift.payload || {};
   return !payload.closeSnapshot && !payload.inferredFromOpenOrders;
 }
@@ -494,7 +536,9 @@ function shiftHasRegisterActivity(shift, orders) {
 
 function shouldInferOpenShiftFromOpenOrders(orders) {
   if (getOpenShift()) return false;
-  const openOrders = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+  const openOrders = orders.filter(
+    (o) => normalizeOrderStatus(o.status) === "Aberta",
+  );
   if (!openOrders.length) return false;
   let earliestMs = Infinity;
   for (const o of openOrders) {
@@ -511,17 +555,25 @@ function shouldInferOpenShiftFromOpenOrders(orders) {
 async function reconcileShiftsAfterBootstrap() {
   const orders = loadOrders();
   const open = getOpenShift();
-  if (open && isLegacyAutoOpenShift(open) && !shiftHasRegisterActivity(open, orders)) {
+  if (
+    open &&
+    isLegacyAutoOpenShift(open) &&
+    !shiftHasRegisterActivity(open, orders)
+  ) {
     const closed = await closeShiftRemote(open, {
       totalBruto: 0,
       finalizedOrdersCount: 0,
       sales: [],
-      legacyAutoClosed: true
+      legacyAutoClosed: true,
     });
-    state.cache.shifts = loadShifts().map((s) => (String(s.id) === String(closed.id) ? closed : s));
+    state.cache.shifts = loadShifts().map((s) =>
+      String(s.id) === String(closed.id) ? closed : s,
+    );
   }
   if (!shouldInferOpenShiftFromOpenOrders(orders)) return;
-  const openOrders = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+  const openOrders = orders.filter(
+    (o) => normalizeOrderStatus(o.status) === "Aberta",
+  );
   let earliestMs = Infinity;
   let startedAt = openOrders[0]?.createdAt || new Date().toISOString();
   for (const o of openOrders) {
@@ -542,7 +594,7 @@ async function reconcileShiftsAfterBootstrap() {
   const startedDate = new Date(startedAt);
   const created = await insertShiftRemote({
     referenceDate: todayLocalYmdFromDate(startedDate),
-    startedAt
+    startedAt,
   });
   const withMeta = { ...created, payload: { inferredFromOpenOrders: true } };
   const sb = await getSupabase();
@@ -552,7 +604,10 @@ async function reconcileShiftsAfterBootstrap() {
       .update({ payload: { inferredFromOpenOrders: true } })
       .eq("id", String(created.id));
   }
-  state.cache.shifts = [withMeta, ...loadShifts().filter((s) => String(s.id) !== String(created.id))];
+  state.cache.shifts = [
+    withMeta,
+    ...loadShifts().filter((s) => String(s.id) !== String(created.id)),
+  ];
 }
 
 function formatShiftLabel(shift) {
@@ -562,14 +617,17 @@ function formatShiftLabel(shift) {
         day: "2-digit",
         month: "2-digit",
         hour: "2-digit",
-        minute: "2-digit"
+        minute: "2-digit",
       })
     : "";
-  return shift.status === "fechado" ? `Caixa (fechado ${opened})` : `Caixa aberto desde ${opened}`;
+  return shift.status === "fechado"
+    ? `Caixa (fechado ${opened})`
+    : `Caixa aberto desde ${opened}`;
 }
 
 function orderBelongsToShift(order, shift) {
-  if (!shift || normalizeOrderStatus(order.status) !== "Finalizado") return false;
+  if (!shift || normalizeOrderStatus(order.status) !== "Finalizado")
+    return false;
   if (order.shiftId && String(order.shiftId) === String(shift.id)) return true;
   const closedIso = order.closedAt || order.createdAt;
   if (!closedIso) return false;
@@ -580,7 +638,8 @@ function orderBelongsToShift(order, shift) {
       ? new Date(shift.endedAt).getTime()
       : Date.now();
   if (t >= start && t <= end) return true;
-  if (shift.payload?.inferredFromOpenOrders && !order.shiftId && t <= end) return true;
+  if (shift.payload?.inferredFromOpenOrders && !order.shiftId && t <= end)
+    return true;
   return false;
 }
 
@@ -590,7 +649,9 @@ function ordersFinalizedInShift(orders, shift) {
 }
 
 function ordersForDashboard(orders, shift) {
-  const open = orders.filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+  const open = orders.filter(
+    (o) => normalizeOrderStatus(o.status) === "Aberta",
+  );
   if (!shift) return open;
   const finalized = ordersFinalizedInShift(orders, shift);
   const seen = new Set();
@@ -610,7 +671,7 @@ function computeCashCloseDraft(shift) {
       activeOrdersCount: 0,
       totalBruto: 0,
       finalizedOrdersCount: 0,
-      sales: []
+      sales: [],
     };
   }
   const orders = loadOrders();
@@ -626,17 +687,25 @@ function computeCashCloseDraft(shift) {
       orderId: order.id,
       customer: (order.customer || "").trim() || "Cliente sem nome",
       totalPaid: order.totalPaid || 0,
-      paymentMethods: Array.isArray(order.paymentMethods) ? order.paymentMethods : [],
-      itemsCount: (order.items || []).reduce((sum, item) => sum + (item.qty || 0), 0),
-      closedAt: order.closedAt || order.createdAt || null
-    }))
+      paymentMethods: Array.isArray(order.paymentMethods)
+        ? order.paymentMethods
+        : [],
+      itemsCount: (order.items || []).reduce(
+        (sum, item) => sum + (item.qty || 0),
+        0,
+      ),
+      closedAt: order.closedAt || order.createdAt || null,
+    })),
   };
 }
 
 function isValidYmd(ymd) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ""))) return false;
   const d = localDateFromYmd(ymd);
-  const [y, m, day] = String(ymd).slice(0, 10).split("-").map((n) => parseInt(n, 10));
+  const [y, m, day] = String(ymd)
+    .slice(0, 10)
+    .split("-")
+    .map((n) => parseInt(n, 10));
   return d.getFullYear() === y && d.getMonth() === m - 1 && d.getDate() === day;
 }
 
@@ -652,7 +721,8 @@ function suggestReferenceDateForShift(shift) {
     if (!minYmd || ymd < minYmd) minYmd = ymd;
   }
   if (minYmd) return minYmd;
-  if (shift.referenceDate && isValidYmd(shift.referenceDate)) return shift.referenceDate;
+  if (shift.referenceDate && isValidYmd(shift.referenceDate))
+    return shift.referenceDate;
   return todayLocalYmdFromDate(new Date(shift.startedAt || Date.now()));
 }
 
@@ -668,12 +738,16 @@ function getCashCloseReferenceDateForUi(shift) {
 }
 
 async function ensureProfile(session, supabase) {
-  const { data } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", session.user.id)
+    .maybeSingle();
   if (data) return;
   const { error } = await supabase.from("profiles").insert({
     id: session.user.id,
     display_name: session.user.email?.split("@")[0] || "Usuario",
-    role: "Gerente"
+    role: "Gerente",
   });
   if (error && error.code !== "23505") {
     console.warn("[JANA] ensureProfile:", error.message);
@@ -685,30 +759,49 @@ async function bootstrapFromSupabase(session) {
   if (!supabase) throw new Error("Supabase indisponivel");
   const { error: sessionErr } = await supabase.auth.setSession({
     access_token: session.access_token,
-    refresh_token: session.refresh_token
+    refresh_token: session.refresh_token,
   });
   if (sessionErr) {
     console.warn("[JANA] setSession:", sessionErr.message);
   }
   await ensureProfile(session, supabase);
 
-  const [pRes, stockRes, cRes, sRes, dRes, cfgRes, profRes] = await Promise.all([
-    supabase.from("products").select("*"),
-    supabase.from("product_stock").select("product_id, quantity"),
-    supabase.from("commandas").select("id, payload, status, created_at, updated_at, closed_at, shift_id"),
-    supabase.from("shifts").select("*").order("started_at", { ascending: false }),
-    supabase.from("daily_closes").select("id, payload, closed_at, date_ymd"),
-    supabase.from("app_config").select("payload").maybeSingle(),
-    supabase.from("profiles").select("display_name, role").eq("id", session.user.id).maybeSingle()
-  ]);
+  const [pRes, stockRes, cRes, sRes, dRes, cfgRes, profRes] = await Promise.all(
+    [
+      supabase.from("products").select("*"),
+      supabase.from("product_stock").select("product_id, quantity"),
+      supabase
+        .from("commandas")
+        .select(
+          "id, payload, status, created_at, updated_at, closed_at, shift_id",
+        ),
+      supabase
+        .from("shifts")
+        .select("*")
+        .order("started_at", { ascending: false }),
+      supabase.from("daily_closes").select("id, payload, closed_at, date_ymd"),
+      supabase.from("app_config").select("payload").maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("display_name, role")
+        .eq("id", session.user.id)
+        .maybeSingle(),
+    ],
+  );
 
   if (pRes.error) throw pRes.error;
   if (stockRes.error) {
-    console.warn("[JANA] product_stock indisponivel (rode 010_product_stock.sql):", stockRes.error.message);
+    console.warn(
+      "[JANA] product_stock indisponivel (rode 010_product_stock.sql):",
+      stockRes.error.message,
+    );
   }
   if (cRes.error) throw cRes.error;
   if (sRes.error) {
-    console.warn("[JANA] shifts indisponivel (rode 003_shifts.sql):", sRes.error.message);
+    console.warn(
+      "[JANA] shifts indisponivel (rode 003_shifts.sql):",
+      sRes.error.message,
+    );
   }
   if (dRes.error) throw dRes.error;
   if (cfgRes.error) throw cfgRes.error;
@@ -718,7 +811,9 @@ async function bootstrapFromSupabase(session) {
   for (const row of stockRes.error ? [] : stockRes.data || []) {
     stockByProduct[row.product_id] = Math.trunc(Number(row.quantity) || 0);
   }
-  state.cache.products = (pRes.data || []).map((row) => productRowToApp(row, stockByProduct[row.id] ?? 0));
+  state.cache.products = (pRes.data || []).map((row) =>
+    productRowToApp(row, stockByProduct[row.id] ?? 0),
+  );
   state.cache.commandas = (cRes.data || []).map((r) => {
     const base = { ...(r.payload || {}), id: r.id };
     if (r.status != null && r.status !== "") base.status = r.status;
@@ -741,7 +836,7 @@ async function bootstrapFromSupabase(session) {
       ...p,
       id: r.id,
       closedAt: r.closed_at ?? p.closedAt,
-      dateYmd: dateYmd ?? p.dateYmd
+      dateYmd: dateYmd ?? p.dateYmd,
     };
   });
 
@@ -751,7 +846,10 @@ async function bootstrapFromSupabase(session) {
     const def = defaultConfigPayload();
     const up = await supabase
       .from("app_config")
-      .upsert({ user_id: session.user.id, payload: def }, { onConflict: "user_id" });
+      .upsert(
+        { user_id: session.user.id, payload: def },
+        { onConflict: "user_id" },
+      );
     if (up.error) throw up.error;
     state.cache.config = def;
   }
@@ -760,8 +858,9 @@ async function bootstrapFromSupabase(session) {
   setLoggedUser({
     id: session.user.id,
     email: session.user.email,
-    username: pr?.display_name || session.user.email?.split("@")[0] || "Usuario",
-    role: pr?.role || "Atendente"
+    username:
+      pr?.display_name || session.user.email?.split("@")[0] || "Usuario",
+    role: pr?.role || "Atendente",
   });
 
   state.config = loadConfig();
@@ -806,7 +905,10 @@ async function upsertProductRemote(product) {
 async function deleteProductRemote(productId) {
   const sb = await getSupabase();
   if (!sb) return;
-  const { error } = await sb.from("products").delete().eq("id", String(productId));
+  const { error } = await sb
+    .from("products")
+    .delete()
+    .eq("id", String(productId));
   if (error) throw error;
 }
 
@@ -815,7 +917,7 @@ async function adjustProductStockRemote(productId, delta) {
   if (!sb) return;
   const { error } = await sb.rpc("adjust_product_stock", {
     p_product_id: String(productId),
-    p_delta: Math.trunc(delta)
+    p_delta: Math.trunc(delta),
   });
   if (error) throw error;
 }
@@ -825,7 +927,7 @@ async function setProductStockRemote(productId, quantity) {
   if (!sb) return;
   const { error } = await sb.rpc("set_product_stock", {
     p_product_id: String(productId),
-    p_quantity: Math.trunc(quantity)
+    p_quantity: Math.trunc(quantity),
   });
   if (error) throw error;
 }
@@ -842,14 +944,15 @@ async function ensureProductStockRowRemote(productId) {
 async function upsertCommandaRemote(order) {
   const sb = await getSupabase();
   if (!sb) return;
-  const createdRaw = toIsoTimestamptz(order.createdAt) || new Date().toISOString();
+  const createdRaw =
+    toIsoTimestamptz(order.createdAt) || new Date().toISOString();
   const row = {
     id: order.id,
     payload: commandaPayloadDocument(order),
     status: order.status || "Aberta",
     closed_at: toIsoTimestamptz(order.closedAt),
     created_at: createdRaw,
-    shift_id: order.shiftId || null
+    shift_id: order.shiftId || null,
   };
   const { error } = await sb.from("commandas").upsert(row);
   if (error) throw error;
@@ -858,7 +961,10 @@ async function upsertCommandaRemote(order) {
 async function deleteCommandaRemote(orderId) {
   const sb = await getSupabase();
   if (!sb) return;
-  const { error } = await sb.from("commandas").delete().eq("id", String(orderId));
+  const { error } = await sb
+    .from("commandas")
+    .delete()
+    .eq("id", String(orderId));
   if (error) throw error;
 }
 
@@ -868,7 +974,12 @@ async function upsertAppConfigRemote(config) {
   const { data: u } = await sb.auth.getUser();
   const uid = u.user?.id;
   if (!uid) return;
-  const { error } = await sb.from("app_config").upsert({ user_id: uid, payload: { ...config } }, { onConflict: "user_id" });
+  const { error } = await sb
+    .from("app_config")
+    .upsert(
+      { user_id: uid, payload: { ...config } },
+      { onConflict: "user_id" },
+    );
   if (error) throw error;
 }
 
@@ -885,7 +996,7 @@ async function insertDailyCloseRemote(id, payloadDoc) {
     id,
     payload: payloadDoc,
     closed_at: closed_at || new Date().toISOString(),
-    date_ymd
+    date_ymd,
   });
   if (error) throw error;
 }
@@ -893,7 +1004,10 @@ async function insertDailyCloseRemote(id, payloadDoc) {
 async function deleteDailyCloseRemote(closeId) {
   const sb = await getSupabase();
   if (!sb) return;
-  const { error } = await sb.from("daily_closes").delete().eq("id", String(closeId));
+  const { error } = await sb
+    .from("daily_closes")
+    .delete()
+    .eq("id", String(closeId));
   if (error) throw error;
 }
 
@@ -902,7 +1016,8 @@ async function insertShiftRemote(shift) {
   if (!sb) throw new Error("Supabase indisponivel");
   const startedAt = shift.startedAt || new Date().toISOString();
   const startedDate = new Date(startedAt);
-  const referenceDate = shift.referenceDate || todayLocalYmdFromDate(startedDate);
+  const referenceDate =
+    shift.referenceDate || todayLocalYmdFromDate(startedDate);
   const hm = localHmFromDate(startedDate);
   const { data, error } = await sb
     .from("shifts")
@@ -914,7 +1029,7 @@ async function insertShiftRemote(shift) {
       window_end_at: startedAt,
       started_at: startedAt,
       status: "aberto",
-      payload: {}
+      payload: {},
     })
     .select("*")
     .single();
@@ -940,7 +1055,7 @@ async function closeShiftRemote(shift, closePayload, referenceDateYmd) {
       ended_at: endedAt,
       window_end_at: endedAt,
       scheduled_end: localHmFromDate(endedDate),
-      payload: { closeSnapshot: snapshot, closedAt: endedAt, referenceDate }
+      payload: { closeSnapshot: snapshot, closedAt: endedAt, referenceDate },
     })
     .eq("id", String(shift.id))
     .select("*")
@@ -963,13 +1078,17 @@ async function reopenShiftRemote(shiftId) {
 }
 
 async function openShiftManual() {
-  if (getOpenShift()) throw new Error("Ja existe um caixa aberto. Feche-o antes de abrir outro.");
+  if (getOpenShift())
+    throw new Error("Ja existe um caixa aberto. Feche-o antes de abrir outro.");
   const now = new Date();
   const created = await insertShiftRemote({
     referenceDate: todayLocalYmdFromDate(now),
-    startedAt: now.toISOString()
+    startedAt: now.toISOString(),
   });
-  state.cache.shifts = [created, ...loadShifts().filter((s) => String(s.id) !== String(created.id))];
+  state.cache.shifts = [
+    created,
+    ...loadShifts().filter((s) => String(s.id) !== String(created.id)),
+  ];
   state.cashCloseReferenceDateYmd = "";
   state.cashCloseReferenceShiftId = null;
   return created;
@@ -983,17 +1102,24 @@ async function ensureOpenShiftAuto() {
     return true;
   } catch (e) {
     console.error("[JANA] ensureOpenShiftAuto", e);
-    alert((e && e.message) || "Nao foi possivel abrir o caixa automaticamente.");
+    alert(
+      (e && e.message) || "Nao foi possivel abrir o caixa automaticamente.",
+    );
     return false;
   }
 }
 
 async function persistShiftClose(shift, referenceDateYmd) {
-  const ref = referenceDateYmd && isValidYmd(referenceDateYmd) ? referenceDateYmd : suggestReferenceDateForShift(shift);
+  const ref =
+    referenceDateYmd && isValidYmd(referenceDateYmd)
+      ? referenceDateYmd
+      : suggestReferenceDateForShift(shift);
   const draft = computeCashCloseDraft(shift);
   draft.referenceDate = ref;
   const closed = await closeShiftRemote(shift, draft, ref);
-  const list = loadShifts().map((s) => (String(s.id) === String(closed.id) ? closed : s));
+  const list = loadShifts().map((s) =>
+    String(s.id) === String(closed.id) ? closed : s,
+  );
   state.cache.shifts = list;
   state.cashCloseReferenceDateYmd = "";
   state.cashCloseReferenceShiftId = null;
@@ -1003,7 +1129,9 @@ async function persistShiftClose(shift, referenceDateYmd) {
 function getLastClosedShift() {
   const closed = loadShifts()
     .filter((s) => s.status === "fechado" && s.endedAt)
-    .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime());
+    .sort(
+      (a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime(),
+    );
   return closed[0] || null;
 }
 
@@ -1018,7 +1146,9 @@ function undoLastShiftCloseHint() {
   }
   const last = getLastClosedShift();
   if (!last) return "Nao ha caixa fechado para desfazer.";
-  const ref = last.referenceDate ? last.referenceDate.split("-").reverse().join("/") : "";
+  const ref = last.referenceDate
+    ? last.referenceDate.split("-").reverse().join("/")
+    : "";
   return `Reabre o ultimo caixa fechado (ref. ${ref || "—"}). E sempre o mesmo registro — nao escolhe dia no historico.`;
 }
 
@@ -1026,10 +1156,14 @@ async function rollbackLastClosedShift() {
   const target = getLastClosedShift();
   if (!target) return false;
   if (getOpenShift()) {
-    throw new Error("Feche o caixa aberto antes de desfazer o ultimo fechamento.");
+    throw new Error(
+      "Feche o caixa aberto antes de desfazer o ultimo fechamento.",
+    );
   }
   const reopened = await reopenShiftRemote(target.id);
-  state.cache.shifts = loadShifts().map((s) => (String(s.id) === String(reopened.id) ? reopened : s));
+  state.cache.shifts = loadShifts().map((s) =>
+    String(s.id) === String(reopened.id) ? reopened : s,
+  );
   return true;
 }
 
@@ -1042,7 +1176,7 @@ let orderItemsTimerInterval = null;
 const THEME_PRESETS = {
   "dark-pro": { label: "Dark Pro", description: "Escuro confortavel" },
   apple: { label: "Apple", description: "Limpo e sofisticado" },
-  "blue-service": { label: "Blue Service", description: "Azul institucional" }
+  "blue-service": { label: "Blue Service", description: "Azul institucional" },
 };
 
 const state = {
@@ -1074,14 +1208,21 @@ const state = {
     useServiceFee: true,
     useStock: true,
     activeTheme: "blue-service",
-    categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
+    categories: [
+      "Bebidas",
+      "Lanches",
+      "Porcoes",
+      "Pratos",
+      "Sobremesas",
+      "Outros",
+    ],
     prepCategories: [],
     paymentMethods: [
       { id: "card", name: "Cartao", active: true },
       { id: "cash", name: "Dinheiro", active: true },
       { id: "pix", name: "PIX", active: true },
-      { id: "voucher", name: "Vale Ref.", active: true }
-    ]
+      { id: "voucher", name: "Vale Ref.", active: true },
+    ],
   },
   cache: {
     commandas: [],
@@ -1092,18 +1233,25 @@ const state = {
       useServiceFee: true,
       useStock: true,
       activeTheme: "blue-service",
-      categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
+      categories: [
+        "Bebidas",
+        "Lanches",
+        "Porcoes",
+        "Pratos",
+        "Sobremesas",
+        "Outros",
+      ],
       prepCategories: [],
       paymentMethods: [
         { id: "card", name: "Cartao", active: true },
         { id: "cash", name: "Dinheiro", active: true },
         { id: "pix", name: "PIX", active: true },
-        { id: "voucher", name: "Vale Ref.", active: true }
-      ]
+        { id: "voucher", name: "Vale Ref.", active: true },
+      ],
     },
     dailyCloses: [],
-    shifts: []
-  }
+    shifts: [],
+  },
 };
 
 function clearDataCache() {
@@ -1170,15 +1318,21 @@ const refs = {
   orderSubtotalLabel: document.querySelector("#orderSubtotalLabel"),
   checkoutButton: document.querySelector("#checkoutButton"),
   checkoutDialog: document.querySelector("#checkoutDialog"),
-  closeCheckoutDialogButton: document.querySelector("#closeCheckoutDialogButton"),
+  closeCheckoutDialogButton: document.querySelector(
+    "#closeCheckoutDialogButton",
+  ),
   checkoutSummary: document.querySelector("#checkoutSummary"),
-  checkoutPaymentMethodsList: document.querySelector("#checkoutPaymentMethodsList"),
+  checkoutPaymentMethodsList: document.querySelector(
+    "#checkoutPaymentMethodsList",
+  ),
   serviceFeeField: document.querySelector("#serviceFeeField"),
   serviceFeeInput: document.querySelector("#serviceFeeInput"),
   confirmCheckoutButton: document.querySelector("#confirmCheckoutButton"),
   checkoutFeedback: document.querySelector("#checkoutFeedback"),
   cashCloseHistoryDialog: document.querySelector("#cashCloseHistoryDialog"),
-  closeCashCloseHistoryButton: document.querySelector("#closeCashCloseHistoryButton"),
+  closeCashCloseHistoryButton: document.querySelector(
+    "#closeCashCloseHistoryButton",
+  ),
   cashCloseHistoryBody: document.querySelector("#cashCloseHistoryBody"),
   productForm: document.querySelector("#productForm"),
   productIdInput: document.querySelector("#productIdInput"),
@@ -1189,24 +1343,42 @@ const refs = {
   productRequiresPrepInput: document.querySelector("#productRequiresPrepInput"),
   productSpecialInput: document.querySelector("#productSpecialInput"),
   productSpecialPanel: document.querySelector("#productSpecialPanel"),
-  productStockComponentsList: document.querySelector("#productStockComponentsList"),
-  productStockDisplaySelect: document.querySelector("#productStockDisplaySelect"),
+  productStockComponentsList: document.querySelector(
+    "#productStockComponentsList",
+  ),
+  productStockDisplaySelect: document.querySelector(
+    "#productStockDisplaySelect",
+  ),
   clearProductFormButton: document.querySelector("#clearProductFormButton"),
   productsList: document.querySelector("#productsList"),
   stockProductsList: document.querySelector("#stockProductsList"),
   stockSaveAllButton: document.querySelector("#stockSaveAllButton"),
   stockAdminFeedback: document.querySelector("#stockAdminFeedback"),
-  stockAdminCategoryButtons: document.querySelector("#stockAdminCategoryButtons"),
-  stockAdminCategoryTabsLeftHint: document.querySelector("#stockAdminCategoryTabsLeftHint"),
-  stockAdminCategoryTabsRightHint: document.querySelector("#stockAdminCategoryTabsRightHint"),
-  productAdminCategoryButtons: document.querySelector("#productAdminCategoryButtons"),
-  productAdminCategoryTabsLeftHint: document.querySelector("#productAdminCategoryTabsLeftHint"),
-  productAdminCategoryTabsRightHint: document.querySelector("#productAdminCategoryTabsRightHint"),
+  stockAdminCategoryButtons: document.querySelector(
+    "#stockAdminCategoryButtons",
+  ),
+  stockAdminCategoryTabsLeftHint: document.querySelector(
+    "#stockAdminCategoryTabsLeftHint",
+  ),
+  stockAdminCategoryTabsRightHint: document.querySelector(
+    "#stockAdminCategoryTabsRightHint",
+  ),
+  productAdminCategoryButtons: document.querySelector(
+    "#productAdminCategoryButtons",
+  ),
+  productAdminCategoryTabsLeftHint: document.querySelector(
+    "#productAdminCategoryTabsLeftHint",
+  ),
+  productAdminCategoryTabsRightHint: document.querySelector(
+    "#productAdminCategoryTabsRightHint",
+  ),
   tableModeToggle: document.querySelector("#tableModeToggle"),
   serviceFeeToggle: document.querySelector("#serviceFeeToggle"),
   stockModeToggle: document.querySelector("#stockModeToggle"),
   productStockFeaturesWrap: document.querySelector("#productStockFeaturesWrap"),
-  settingsTabInventoryButton: document.querySelector('[data-settings-tab="inventory"]'),
+  settingsTabInventoryButton: document.querySelector(
+    '[data-settings-tab="inventory"]',
+  ),
   orderTableGroup: document.querySelector("#orderTableGroup"),
   categoryForm: document.querySelector("#categoryForm"),
   categoryNameInput: document.querySelector("#categoryNameInput"),
@@ -1220,7 +1392,9 @@ const refs = {
   paymentMethodForm: document.querySelector("#paymentMethodForm"),
   paymentMethodNameInput: document.querySelector("#paymentMethodNameInput"),
   paymentMethodFeedback: document.querySelector("#paymentMethodFeedback"),
-  paymentMethodsSettingsList: document.querySelector("#paymentMethodsSettingsList"),
+  paymentMethodsSettingsList: document.querySelector(
+    "#paymentMethodsSettingsList",
+  ),
   activeThemeLabel: document.querySelector("#activeThemeLabel"),
   themePresetList: document.querySelector("#themePresetList"),
   confirmSettingsButton: document.querySelector("#confirmSettingsButton"),
@@ -1229,8 +1403,12 @@ const refs = {
   reopenOrdersList: document.querySelector("#reopenOrdersList"),
   reopenPanelFeedback: document.querySelector("#reopenPanelFeedback"),
   reopenConfirmDialog: document.querySelector("#reopenConfirmDialog"),
-  reopenConfirmAcceptButton: document.querySelector("#reopenConfirmAcceptButton"),
-  reopenConfirmDismissButton: document.querySelector("#reopenConfirmDismissButton"),
+  reopenConfirmAcceptButton: document.querySelector(
+    "#reopenConfirmAcceptButton",
+  ),
+  reopenConfirmDismissButton: document.querySelector(
+    "#reopenConfirmDismissButton",
+  ),
   reopenShiftSummary: document.querySelector("#reopenShiftSummary"),
   reopenShiftUndoButton: document.querySelector("#reopenShiftUndoButton"),
   reopenShiftFeedback: document.querySelector("#reopenShiftFeedback"),
@@ -1239,7 +1417,7 @@ const refs = {
   reportsPicker: document.querySelector("#reportsPicker"),
   reportsDetail: document.querySelector("#reportsDetail"),
   reportsDetailBody: document.querySelector("#reportsDetailBody"),
-  reportsBackButton: document.querySelector("#reportsBackButton")
+  reportsBackButton: document.querySelector("#reportsBackButton"),
 };
 
 /** Evita flash da tela de login ao recarregar com sessão Supabase salva no navegador. */
@@ -1270,7 +1448,10 @@ function showAuthBootScreen() {
 })();
 
 function formatCurrency(value) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
 }
 
 /** Indicador discreto de estoque no catalogo da comanda. */
@@ -1292,7 +1473,8 @@ function saveProducts(products) {
   state.cache.products = products;
   void (async () => {
     for (const product of products) {
-      if (product.id === undefined || product.id === null || product.id === "") continue;
+      if (product.id === undefined || product.id === null || product.id === "")
+        continue;
       try {
         await upsertProductRemote(product);
       } catch (e) {
@@ -1310,7 +1492,8 @@ function saveOrders(orders) {
   state.cache.commandas = orders;
   void (async () => {
     for (const order of orders) {
-      if (order.id === undefined || order.id === null || order.id === "") continue;
+      if (order.id === undefined || order.id === null || order.id === "")
+        continue;
       try {
         await upsertCommandaRemote(order);
       } catch (e) {
@@ -1335,7 +1518,9 @@ function renderCashCloseHistoryOverlay() {
             const sales = Array.isArray(snap.sales) ? snap.sales : [];
             const rowId = String(row.id);
             const isExpanded = state.cashCloseHistoryExpandedId === rowId;
-            const refLabel = row.referenceDate ? row.referenceDate.split("-").reverse().join("/") : "";
+            const refLabel = row.referenceDate
+              ? row.referenceDate.split("-").reverse().join("/")
+              : "";
             return `
           <li class="rounded-lg border border-outline-variant px-3 py-2 text-xs">
             <button type="button" class="cash-close-history-toggle w-full text-left" data-close-id="${rowId}">
@@ -1352,8 +1537,9 @@ function renderCashCloseHistoryOverlay() {
               isExpanded
                 ? `<div class="mt-2 rounded-md bg-surface-container-low px-2 py-2">
                     <p class="text-[10px] font-semibold uppercase text-on-surface-variant">Vendas deste fechamento</p>
-                    ${sales.length
-                      ? `
+                    ${
+                      sales.length
+                        ? `
                         <ul class="mt-1 space-y-1">
                           ${sales
                             .map(
@@ -1361,11 +1547,12 @@ function renderCashCloseHistoryOverlay() {
                             <li class="rounded border border-outline-variant px-2 py-1">
                               <p class="font-semibold text-on-surface">${sale.customer || "Cliente sem nome"} • ${formatCurrency(sale.totalPaid || 0)}</p>
                               <p class="text-[10px] text-on-surface-variant">Itens: ${sale.itemsCount ?? 0} • Pagamento: ${(sale.paymentMethods || []).join(", ") || "Nao informado"}</p>
-                            </li>`
+                            </li>`,
                             )
                             .join("")}
                         </ul>`
-                      : "<p class='mt-1 text-[10px] text-on-surface-variant'>Sem detalhes de vendas neste fechamento.</p>"}
+                        : "<p class='mt-1 text-[10px] text-on-surface-variant'>Sem detalhes de vendas neste fechamento.</p>"
+                    }
                   </div>`
                 : ""
             }
@@ -1394,29 +1581,48 @@ function loadConfig() {
     useServiceFee: true,
     useStock: true,
     activeTheme: "blue-service",
-    categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
+    categories: [
+      "Bebidas",
+      "Lanches",
+      "Porcoes",
+      "Pratos",
+      "Sobremesas",
+      "Outros",
+    ],
     prepCategories: [],
     paymentMethods: [
       { id: "card", name: "Cartao", active: true },
       { id: "cash", name: "Dinheiro", active: true },
       { id: "pix", name: "PIX", active: true },
-      { id: "voucher", name: "Vale Ref.", active: true }
+      { id: "voucher", name: "Vale Ref.", active: true },
     ],
   };
   const config = state.cache.config || fallback;
   return {
     ...fallback,
     ...config,
-    activeTheme: THEME_PRESETS[config.activeTheme] ? config.activeTheme : fallback.activeTheme,
-    categories: Array.isArray(config.categories) && config.categories.length ? config.categories : fallback.categories,
-    prepCategories: Array.isArray(config.prepCategories) ? config.prepCategories : fallback.prepCategories,
-    paymentMethods: Array.isArray(config.paymentMethods) && config.paymentMethods.length ? config.paymentMethods : fallback.paymentMethods
+    activeTheme: THEME_PRESETS[config.activeTheme]
+      ? config.activeTheme
+      : fallback.activeTheme,
+    categories:
+      Array.isArray(config.categories) && config.categories.length
+        ? config.categories
+        : fallback.categories,
+    prepCategories: Array.isArray(config.prepCategories)
+      ? config.prepCategories
+      : fallback.prepCategories,
+    paymentMethods:
+      Array.isArray(config.paymentMethods) && config.paymentMethods.length
+        ? config.paymentMethods
+        : fallback.paymentMethods,
   };
 }
 
 function saveConfig(config) {
   state.cache.config = config;
-  void upsertAppConfigRemote(config).catch((e) => console.error("[JANA] saveConfig", e));
+  void upsertAppConfigRemote(config).catch((e) =>
+    console.error("[JANA] saveConfig", e),
+  );
 }
 
 function applyTheme() {
@@ -1427,7 +1633,7 @@ function applyTheme() {
     const themeColorByKey = {
       apple: "#0071e3",
       "blue-service": "#00234b",
-      "dark-pro": "#13161c"
+      "dark-pro": "#13161c",
     };
     meta.setAttribute("content", themeColorByKey[theme] || "#fbf9fc");
   }
@@ -1435,7 +1641,10 @@ function applyTheme() {
 
 function updateHorizontalScrollHints(scroller, leftHint, rightHint) {
   if (!scroller || !leftHint || !rightHint) return;
-  const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+  const maxScrollLeft = Math.max(
+    0,
+    scroller.scrollWidth - scroller.clientWidth,
+  );
   const hasOverflow = maxScrollLeft > 2;
   const showLeft = hasOverflow && scroller.scrollLeft > 4;
   const showRight = hasOverflow && scroller.scrollLeft < maxScrollLeft - 4;
@@ -1451,19 +1660,32 @@ function scheduleHorizontalScrollHints(updateFn) {
 }
 
 function updateSettingsTabsHints() {
-  updateHorizontalScrollHints(refs.settingsTabsScroll, refs.settingsTabsLeftHint, refs.settingsTabsRightHint);
+  updateHorizontalScrollHints(
+    refs.settingsTabsScroll,
+    refs.settingsTabsLeftHint,
+    refs.settingsTabsRightHint,
+  );
 }
 
 function updateCategoryTabsHints() {
-  if (!refs.categoryTabsScroll || !refs.categoryTabsLeftHint || !refs.categoryTabsRightHint) return;
-  updateHorizontalScrollHints(refs.categoryButtons, refs.categoryTabsLeftHint, refs.categoryTabsRightHint);
+  if (
+    !refs.categoryTabsScroll ||
+    !refs.categoryTabsLeftHint ||
+    !refs.categoryTabsRightHint
+  )
+    return;
+  updateHorizontalScrollHints(
+    refs.categoryButtons,
+    refs.categoryTabsLeftHint,
+    refs.categoryTabsRightHint,
+  );
 }
 
 function updateProductAdminCategoryTabsHints() {
   updateHorizontalScrollHints(
     refs.productAdminCategoryButtons,
     refs.productAdminCategoryTabsLeftHint,
-    refs.productAdminCategoryTabsRightHint
+    refs.productAdminCategoryTabsRightHint,
   );
 }
 
@@ -1471,7 +1693,7 @@ function updateStockAdminCategoryTabsHints() {
   updateHorizontalScrollHints(
     refs.stockAdminCategoryButtons,
     refs.stockAdminCategoryTabsLeftHint,
-    refs.stockAdminCategoryTabsRightHint
+    refs.stockAdminCategoryTabsRightHint,
   );
 }
 
@@ -1485,12 +1707,16 @@ function refreshSettingsCategoryFilterHints() {
 }
 
 function isPendingLocalOrder() {
-  return state.pendingNewOrder != null && state.selectedOrderId === PENDING_ORDER_ID;
+  return (
+    state.pendingNewOrder != null && state.selectedOrderId === PENDING_ORDER_ID
+  );
 }
 
 function getCurrentOrder() {
   if (isPendingLocalOrder()) return state.pendingNewOrder;
-  return loadOrders().find((order) => String(order.id) === String(state.selectedOrderId));
+  return loadOrders().find(
+    (order) => String(order.id) === String(state.selectedOrderId),
+  );
 }
 
 function calculateOrderSubtotal(order) {
@@ -1547,17 +1773,22 @@ function aggregateTopProducts(orders, limit = 15) {
   const byKey = new Map();
   for (const order of orders) {
     for (const item of order.items || []) {
-      const key = item.productId != null && item.productId !== "" ? `id:${item.productId}` : `name:${item.name || ""}`;
-      const cur = byKey.get(key) || { name: item.name || key, qty: 0, revenue: 0 };
+      const key =
+        item.productId != null && item.productId !== ""
+          ? `id:${item.productId}`
+          : `name:${item.name || ""}`;
+      const cur = byKey.get(key) || {
+        name: item.name || key,
+        qty: 0,
+        revenue: 0,
+      };
       cur.qty += item.qty || 0;
       cur.revenue += (item.price || 0) * (item.qty || 0);
       if (item.name) cur.name = item.name;
       byKey.set(key, cur);
     }
   }
-  return [...byKey.values()]
-    .sort((a, b) => b.qty - a.qty)
-    .slice(0, limit);
+  return [...byKey.values()].sort((a, b) => b.qty - a.qty).slice(0, limit);
 }
 
 /** Contagem de comandas e soma de faturamento por hora local (0-23) no instante de fechamento. */
@@ -1577,7 +1808,11 @@ function aggregatePeakHour(orders) {
   for (let i = 1; i < 24; i++) {
     if (counts[i] > counts[maxIdx]) maxIdx = i;
   }
-  return { counts, revenue, peakHourIndex: counts.some((c) => c > 0) ? maxIdx : null };
+  return {
+    counts,
+    revenue,
+    peakHourIndex: counts.some((c) => c > 0) ? maxIdx : null,
+  };
 }
 
 /** Contagem e faturamento por dia da semana local (0 = domingo). */
@@ -1597,7 +1832,11 @@ function aggregateWeekday(orders) {
   for (let i = 1; i < 7; i++) {
     if (counts[i] > counts[maxIdx]) maxIdx = i;
   }
-  return { counts, revenue, peakWeekdayIndex: counts.some((c) => c > 0) ? maxIdx : null };
+  return {
+    counts,
+    revenue,
+    peakWeekdayIndex: counts.some((c) => c > 0) ? maxIdx : null,
+  };
 }
 
 function paymentSharesSorted(map) {
@@ -1611,14 +1850,17 @@ function categoryRequiresPrep(category) {
 }
 
 function normalizeOrderStatus(status) {
-  if (status === "Finalizado" || status === "Cancelada" || status === "Aberta") return status;
+  if (status === "Finalizado" || status === "Cancelada" || status === "Aberta")
+    return status;
   // Compatibilidade com status legado.
   if (status === "Aguardando" || status === "Em curso") return "Aberta";
   return "Aberta";
 }
 
 function getOpenOrders() {
-  return loadOrders().filter((o) => normalizeOrderStatus(o.status) === "Aberta");
+  return loadOrders().filter(
+    (o) => normalizeOrderStatus(o.status) === "Aberta",
+  );
 }
 
 function formatOpenOrdersCashCloseHint(maxNames = 4) {
@@ -1628,7 +1870,8 @@ function formatOpenOrdersCashCloseHint(maxNames = 4) {
   const names = open
     .map((o) => {
       const label = (o.customer || "").trim() || "Sem nome";
-      const table = state.config.useTables && o.table ? ` · mesa ${o.table}` : "";
+      const table =
+        state.config.useTables && o.table ? ` · mesa ${o.table}` : "";
       return `${label}${table}`;
     })
     .slice(0, maxNames);
@@ -1639,13 +1882,17 @@ function formatOpenOrdersCashCloseHint(maxNames = 4) {
 }
 
 function deriveOrderStatus(order) {
-  if (order.status === "Finalizado" || order.status === "Cancelada") return order.status;
+  if (order.status === "Finalizado" || order.status === "Cancelada")
+    return order.status;
   return "Aberta";
 }
 
 function formatTimeShort(isoDate) {
   if (!isoDate) return "";
-  return new Date(isoDate).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return new Date(isoDate).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatElapsedSince(isoDate) {
@@ -1700,11 +1947,13 @@ function computeServiceSeconds(requestedAt, deliveredAt) {
 }
 
 function syncOrderLineTimerElements() {
-  document.querySelectorAll(".order-line-timer[data-requested-at]").forEach((el) => {
-    const iso = el.dataset.requestedAt;
-    if (!iso) return;
-    el.textContent = formatElapsedClock(iso);
-  });
+  document
+    .querySelectorAll(".order-line-timer[data-requested-at]")
+    .forEach((el) => {
+      const iso = el.dataset.requestedAt;
+      if (!iso) return;
+      el.textContent = formatElapsedClock(iso);
+    });
 }
 
 function syncOrderItemsTimerInterval() {
@@ -1718,7 +1967,9 @@ function syncOrderItemsTimerInterval() {
   const openOrder = onDetail && order && status === "Aberta";
   const hasRunning =
     openOrder &&
-    (order.items || []).some((item) => item.requiresPrep && item.requestedAt && !item.deliveredAt);
+    (order.items || []).some(
+      (item) => item.requiresPrep && item.requestedAt && !item.deliveredAt,
+    );
   if (!hasRunning) return;
   orderItemsTimerInterval = window.setInterval(() => {
     if (state.currentView !== "detail") {
@@ -1735,10 +1986,15 @@ function markLineDelivered(lineId) {
   if (!order) return;
   const status = normalizeOrderStatus(order.status);
   if (status !== "Aberta") return;
-  const item = order.items.find((entry) => String(entry.lineId) === String(lineId));
+  const item = order.items.find(
+    (entry) => String(entry.lineId) === String(lineId),
+  );
   if (!item || item.deliveredAt || !item.requiresPrep) return;
   item.deliveredAt = new Date().toISOString();
-  item.serviceSeconds = computeServiceSeconds(item.requestedAt, item.deliveredAt);
+  item.serviceSeconds = computeServiceSeconds(
+    item.requestedAt,
+    item.deliveredAt,
+  );
 
   if (isPendingLocalOrder()) {
     renderDashboard();
@@ -1783,8 +2039,10 @@ function localYmdFromIso(isoString) {
 /** Data usada para filtrar reabertura: fechamento, cancelamento ou criacao (fallback). */
 function orderReopenEventYmd(order) {
   const st = normalizeOrderStatus(order.status);
-  if (st === "Finalizado") return localYmdFromIso(order.closedAt || order.createdAt);
-  if (st === "Cancelada") return localYmdFromIso(order.canceledAt || order.createdAt);
+  if (st === "Finalizado")
+    return localYmdFromIso(order.closedAt || order.createdAt);
+  if (st === "Cancelada")
+    return localYmdFromIso(order.canceledAt || order.createdAt);
   return "";
 }
 
@@ -1796,9 +2054,14 @@ function recordOrderReopenAudit(order, previousStatus) {
     previousClosedAt: order.closedAt || null,
     previousCanceledAt: order.canceledAt || null,
     previousTotalPaid: order.totalPaid ?? null,
-    previousPaymentMethods: Array.isArray(order.paymentMethods) ? [...order.paymentMethods] : []
+    previousPaymentMethods: Array.isArray(order.paymentMethods)
+      ? [...order.paymentMethods]
+      : [],
   };
-  order.reopenHistory = [...(Array.isArray(order.reopenHistory) ? order.reopenHistory : []), entry];
+  order.reopenHistory = [
+    ...(Array.isArray(order.reopenHistory) ? order.reopenHistory : []),
+    entry,
+  ];
   order.lastReopenedAt = entry.reopenedAt;
 }
 
@@ -1831,7 +2094,13 @@ function setReopenShiftFeedback(type, text) {
   if (!refs.reopenShiftFeedback) return;
   refs.reopenShiftFeedback.textContent = text || "";
   refs.reopenShiftFeedback.className = `mt-2 min-h-[1rem] text-xs ${
-    type === "err" ? "text-error" : type === "ok" ? "text-secondary" : type === "warn" ? "text-primary" : "text-on-surface-variant"
+    type === "err"
+      ? "text-error"
+      : type === "ok"
+        ? "text-secondary"
+        : type === "warn"
+          ? "text-primary"
+          : "text-on-surface-variant"
   }`;
 }
 
@@ -1843,9 +2112,12 @@ function renderReopenShiftPanel() {
   if (open) {
     refs.reopenShiftSummary.innerHTML = `<p class="text-on-surface">Ha um caixa <strong>aberto</strong> (${formatShiftLabel(open)}). Feche-o em Relatorios antes de desfazer outro fechamento.</p>`;
   } else if (!last) {
-    refs.reopenShiftSummary.innerHTML = "<p>Nenhum caixa fechado encontrado.</p>";
+    refs.reopenShiftSummary.innerHTML =
+      "<p>Nenhum caixa fechado encontrado.</p>";
   } else {
-    const ref = last.referenceDate ? last.referenceDate.split("-").reverse().join("/") : "—";
+    const ref = last.referenceDate
+      ? last.referenceDate.split("-").reverse().join("/")
+      : "—";
     const ended = last.endedAt ? formatDateTimeShort(last.endedAt) : "—";
     const opened = last.startedAt ? formatDateTimeShort(last.startedAt) : "—";
     refs.reopenShiftSummary.innerHTML = `
@@ -1889,7 +2161,10 @@ function renderReopenPanel() {
   refs.reopenOrdersList.innerHTML = matches
     .map((order) => {
       const st = normalizeOrderStatus(order.status);
-      const eventIso = st === "Finalizado" ? order.closedAt || order.createdAt : order.canceledAt || order.createdAt;
+      const eventIso =
+        st === "Finalizado"
+          ? order.closedAt || order.createdAt
+          : order.canceledAt || order.createdAt;
       const when = eventIso ? new Date(eventIso).toLocaleString("pt-BR") : "";
       const subtotal = calculateOrderSubtotal(order);
       const badge =
@@ -1912,7 +2187,9 @@ function renderReopenPanel() {
     .join("");
 
   document.querySelectorAll(".reopen-single-order-button").forEach((btn) => {
-    btn.addEventListener("click", () => openReopenConfirmDialog(btn.dataset.orderId));
+    btn.addEventListener("click", () =>
+      openReopenConfirmDialog(btn.dataset.orderId),
+    );
   });
 }
 
@@ -1957,7 +2234,7 @@ async function createNewOrderAndOpen() {
     serviceFeePercent: 10,
     totalPaid: 0,
     createdAt: new Date().toISOString(),
-    everHadItems: false
+    everHadItems: false,
   };
   state.selectedOrderId = PENDING_ORDER_ID;
   state.currentView = "detail";
@@ -2019,11 +2296,14 @@ function renderDashboard() {
   const shift = getOpenShift();
   const dashboardOrders = ordersForDashboard(orders, shift);
   const finalizedInShift = shift ? ordersFinalizedInShift(orders, shift) : [];
-  const active = orders.filter((order) => normalizeOrderStatus(order.status) === "Aberta");
-  if (refs.dailySalesCount) refs.dailySalesCount.textContent = String(finalizedInShift.length);
+  const active = orders.filter(
+    (order) => normalizeOrderStatus(order.status) === "Aberta",
+  );
+  if (refs.dailySalesCount)
+    refs.dailySalesCount.textContent = String(finalizedInShift.length);
   refs.activeOrdersCount.textContent = String(active.length);
   refs.dailyRevenueValue.textContent = formatCurrency(
-    finalizedInShift.reduce((s, o) => s + (o.totalPaid || 0), 0)
+    finalizedInShift.reduce((s, o) => s + (o.totalPaid || 0), 0),
   );
 
   const filtered = dashboardOrders.filter((order) => {
@@ -2032,7 +2312,8 @@ function renderDashboard() {
   });
 
   if (!filtered.length) {
-    refs.ordersList.innerHTML = "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhuma comanda neste filtro.</li>";
+    refs.ordersList.innerHTML =
+      "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhuma comanda neste filtro.</li>";
     return;
   }
 
@@ -2040,11 +2321,12 @@ function renderDashboard() {
     .map((order) => {
       const subtotal = calculateOrderSubtotal(order);
       const status = normalizeOrderStatus(order.status);
-      const badgeColor = status === "Finalizado"
-        ? "bg-secondary-container text-on-secondary-container"
-        : status === "Cancelada"
-          ? "bg-error-container text-error"
-          : "bg-primary-fixed text-on-primary-fixed-variant";
+      const badgeColor =
+        status === "Finalizado"
+          ? "bg-secondary-container text-on-secondary-container"
+          : status === "Cancelada"
+            ? "bg-error-container text-error"
+            : "bg-primary-fixed text-on-primary-fixed-variant";
       const isViewOnly = status === "Finalizado" || status === "Cancelada";
       const canFinalize = status === "Aberta" && order.items?.length;
       const actionButtons = isViewOnly
@@ -2069,23 +2351,32 @@ function renderDashboard() {
     })
     .join("");
 
-  document.querySelectorAll(".order-open-button, .order-view-button").forEach((button) => {
-    button.addEventListener("click", () => {
-      void openDetailDialog(button.dataset.orderId);
+  document
+    .querySelectorAll(".order-open-button, .order-view-button")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        void openDetailDialog(button.dataset.orderId);
+      });
     });
-  });
   document.querySelectorAll(".order-finalize-button").forEach((button) => {
-    button.addEventListener("click", () => void beginFinalizeFlowForOrderId(button.dataset.orderId));
+    button.addEventListener(
+      "click",
+      () => void beginFinalizeFlowForOrderId(button.dataset.orderId),
+    );
   });
 }
 
 function renderHeaderSettingsButton() {
   if (!refs.openSettingsButton) return;
-  const settingsActive = state.currentView === "main" && state.selectedTab === "settingsTab";
+  const settingsActive =
+    state.currentView === "main" && state.selectedTab === "settingsTab";
   refs.openSettingsButton.className = settingsActive
     ? "header-settings-button header-settings-button--active flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant bg-primary-container text-on-primary-container transition"
     : "header-settings-button flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface transition";
-  refs.openSettingsButton.setAttribute("aria-pressed", settingsActive ? "true" : "false");
+  refs.openSettingsButton.setAttribute(
+    "aria-pressed",
+    settingsActive ? "true" : "false",
+  );
 }
 
 function renderBottomTabs() {
@@ -2121,7 +2412,9 @@ function renderProductCategoryOptions() {
   const current = refs.productCategoryInput.value;
   refs.productCategoryInput.innerHTML = [
     "<option value=''>Selecione uma categoria</option>",
-    ...categories.map((category) => `<option value="${category}">${category}</option>`)
+    ...categories.map(
+      (category) => `<option value="${category}">${category}</option>`,
+    ),
   ].join("");
   if (current && categories.includes(current)) {
     refs.productCategoryInput.value = current;
@@ -2137,7 +2430,7 @@ function renderSettings() {
     categories: document.querySelector("#categoriesSettingsPanel"),
     payments: document.querySelector("#paymentsSettingsPanel"),
     reopen: document.querySelector("#reopenSettingsPanel"),
-    theme: document.querySelector("#themeSettingsPanel")
+    theme: document.querySelector("#themeSettingsPanel"),
   };
   panelMap[state.selectedSettingsTab]?.classList.remove("hidden");
   refs.settingsTabButtons.forEach((button) => {
@@ -2161,20 +2454,27 @@ function renderSettings() {
   renderProductCategoryOptions();
 
   refs.categoriesList.innerHTML = (state.config.categories || [])
-    .map((category) => `
+    .map(
+      (category) => `
       <li class="flex items-center justify-between rounded-lg border border-outline-variant px-3 py-2">
         <span class="text-sm font-semibold text-on-surface">${category}</span>
         <button class="delete-category-button h-8 rounded-md border border-error-container bg-error-container px-2 text-xs font-bold text-error" data-category="${category}">Excluir</button>
       </li>
-    `)
+    `,
+    )
     .join("");
 
   document.querySelectorAll(".delete-category-button").forEach((button) => {
-    button.addEventListener("click", () => deleteCategory(button.dataset.category));
+    button.addEventListener("click", () =>
+      deleteCategory(button.dataset.category),
+    );
   });
 
-  refs.paymentMethodsSettingsList.innerHTML = (state.config.paymentMethods || [])
-    .map((method) => `
+  refs.paymentMethodsSettingsList.innerHTML = (
+    state.config.paymentMethods || []
+  )
+    .map(
+      (method) => `
       <li class="flex items-center justify-between gap-2 rounded-lg border border-outline-variant px-3 py-2">
         <div class="flex items-center gap-2">
           <input class="payment-method-active-toggle h-4 w-4" type="checkbox" data-method-id="${method.id}" ${method.active ? "checked" : ""}>
@@ -2182,25 +2482,35 @@ function renderSettings() {
         </div>
         <button class="delete-payment-method-button h-8 rounded-md border border-error-container bg-error-container px-2 text-xs font-bold text-error" data-method-id="${method.id}">Excluir</button>
       </li>
-    `)
+    `,
+    )
     .join("");
 
-  document.querySelectorAll(".payment-method-active-toggle").forEach((toggle) => {
-    toggle.addEventListener("change", () => {
-      const target = state.config.paymentMethods.find((method) => method.id === toggle.dataset.methodId);
-      if (!target) return;
-      target.active = toggle.checked;
-      saveConfig(state.config);
-      renderCheckoutPaymentMethods();
+  document
+    .querySelectorAll(".payment-method-active-toggle")
+    .forEach((toggle) => {
+      toggle.addEventListener("change", () => {
+        const target = state.config.paymentMethods.find(
+          (method) => method.id === toggle.dataset.methodId,
+        );
+        if (!target) return;
+        target.active = toggle.checked;
+        saveConfig(state.config);
+        renderCheckoutPaymentMethods();
+      });
     });
-  });
-  document.querySelectorAll(".delete-payment-method-button").forEach((button) => {
-    button.addEventListener("click", () => deletePaymentMethod(button.dataset.methodId));
-  });
+  document
+    .querySelectorAll(".delete-payment-method-button")
+    .forEach((button) => {
+      button.addEventListener("click", () =>
+        deletePaymentMethod(button.dataset.methodId),
+      );
+    });
 
   refs.activeThemeLabel.textContent = `Tema ativo: ${THEME_PRESETS[state.config.activeTheme]?.label || "Blue Service"}`;
   refs.themePresetList.innerHTML = Object.entries(THEME_PRESETS)
-    .map(([key, preset]) => `
+    .map(
+      ([key, preset]) => `
       <button class="theme-preset-button rounded-xl border p-2 text-left ${state.config.activeTheme === key ? "border-outline bg-primary-container text-on-primary-container" : "border-outline-variant bg-surface text-on-surface"}" data-theme-key="${key}">
         <div class="theme-mini-card relative overflow-hidden rounded-lg border border-outline-variant p-2" data-theme-preview="${key}">
           <div class="mb-2 h-2 w-16 rounded-full bg-primary"></div>
@@ -2216,10 +2526,14 @@ function renderSettings() {
         <p class="mt-2 text-sm font-bold">${preset.label}</p>
         <p class="text-xs opacity-80">${preset.description}</p>
       </button>
-    `)
+    `,
+    )
     .join("");
   refs.themePresetList.querySelectorAll(".theme-mini-card").forEach((card) => {
-    card.setAttribute("data-theme", card.dataset.themePreview || "blue-service");
+    card.setAttribute(
+      "data-theme",
+      card.dataset.themePreview || "blue-service",
+    );
   });
   document.querySelectorAll(".theme-preset-button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -2240,7 +2554,9 @@ function renderSettings() {
 
 function productCategoryFilterOptions() {
   const configuredCategories = (state.config.categories || []).filter(Boolean);
-  const productCategories = loadProducts().map((product) => product.category).filter(Boolean);
+  const productCategories = loadProducts()
+    .map((product) => product.category)
+    .filter(Boolean);
   return ["Todas", ...new Set([...configuredCategories, ...productCategories])];
 }
 
@@ -2255,7 +2571,7 @@ function renderProductAdminCategoryFilters() {
       (category) => `
       <button type="button" class="product-admin-category-filter h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.productAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
         ${category}
-      </button>`
+      </button>`,
     )
     .join("");
   refreshSettingsCategoryFilterHints();
@@ -2266,11 +2582,13 @@ function renderProductAdmin() {
   const allProducts = loadProducts();
   const products = allProducts.filter(
     (product) =>
-      state.productAdminCategoryFilter === "Todas" || product.category === state.productAdminCategoryFilter
+      state.productAdminCategoryFilter === "Todas" ||
+      product.category === state.productAdminCategoryFilter,
   );
 
   if (!allProducts.length) {
-    refs.productsList.innerHTML = "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto cadastrado.</li>";
+    refs.productsList.innerHTML =
+      "<li class='rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant'>Nenhum produto cadastrado.</li>";
     return;
   }
 
@@ -2280,7 +2598,8 @@ function renderProductAdmin() {
   }
 
   refs.productsList.innerHTML = products
-    .map((product) => `
+    .map(
+      (product) => `
       <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm">
         <div class="flex items-start justify-between gap-2">
           <div>
@@ -2294,15 +2613,20 @@ function renderProductAdmin() {
           </div>
         </div>
       </li>
-    `)
+    `,
+    )
     .join("");
 
   document.querySelectorAll(".product-edit-button").forEach((button) => {
-    button.addEventListener("click", () => fillProductForm(button.dataset.productId));
+    button.addEventListener("click", () =>
+      fillProductForm(button.dataset.productId),
+    );
   });
 
   document.querySelectorAll(".product-delete-button").forEach((button) => {
-    button.addEventListener("click", () => deleteProduct(button.dataset.productId));
+    button.addEventListener("click", () =>
+      deleteProduct(button.dataset.productId),
+    );
   });
 
   syncStockControlDependentUi();
@@ -2319,7 +2643,7 @@ function renderStockAdminCategoryFilters() {
       (category) => `
       <button type="button" class="stock-admin-category-filter h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.stockAdminCategoryFilter ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
         ${category}
-      </button>`
+      </button>`,
     )
     .join("");
   refreshSettingsCategoryFilterHints();
@@ -2328,10 +2652,13 @@ function renderStockAdminCategoryFilters() {
 function renderStockAdmin() {
   if (!refs.stockProductsList) return;
   renderStockAdminCategoryFilters();
-  const allProducts = loadProducts().slice().sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  const allProducts = loadProducts()
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   const products = allProducts.filter(
     (product) =>
-      state.stockAdminCategoryFilter === "Todas" || product.category === state.stockAdminCategoryFilter
+      state.stockAdminCategoryFilter === "Todas" ||
+      product.category === state.stockAdminCategoryFilter,
   );
 
   if (!allProducts.length) {
@@ -2350,7 +2677,7 @@ function renderStockAdmin() {
       if (product.isSpecial) {
         const hint =
           normalizeStockComponentIds(product).length > 0
-            ? "Ajuste o estoque dos insumos vinculados (lista acima)."
+            ? "Ajuste o estoque dos insumos vinculados."
             : "Configure os insumos no cadastro do produto.";
         const displayQty = getProductStockDisplayQuantity(product);
         const displayProduct = product.stockDisplayProductId
@@ -2448,7 +2775,9 @@ function bindStockAdminInteractionsOnce() {
         const input = row.querySelector(".stock-current-input");
         const ok = await saveStockForProductId(productId, input?.value);
         if (refs.stockAdminFeedback) {
-          refs.stockAdminFeedback.textContent = ok ? "Estoque salvo." : "Nao foi possivel salvar o estoque.";
+          refs.stockAdminFeedback.textContent = ok
+            ? "Estoque salvo."
+            : "Nao foi possivel salvar o estoque.";
           refs.stockAdminFeedback.className = ok
             ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
             : "mt-2 min-h-[1rem] text-xs text-error";
@@ -2461,7 +2790,9 @@ function bindStockAdminInteractionsOnce() {
       void (async () => {
         const ok = await applyStockIncrementFromRow(row);
         if (refs.stockAdminFeedback) {
-          refs.stockAdminFeedback.textContent = ok ? "Unidades adicionadas." : "Informe um valor em Adicionar (+).";
+          refs.stockAdminFeedback.textContent = ok
+            ? "Unidades adicionadas."
+            : "Informe um valor em Adicionar (+).";
           refs.stockAdminFeedback.className = ok
             ? "mt-2 min-h-[1rem] text-xs text-on-surface-variant"
             : "mt-2 min-h-[1rem] text-xs text-error";
@@ -2500,11 +2831,13 @@ function renderCategoryOptions() {
     state.selectedCategory = "Todas";
   }
   refs.categoryButtons.innerHTML = categories
-    .map((category) => `
+    .map(
+      (category) => `
       <button class="category-filter-button h-10 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.selectedCategory ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
         ${category}
       </button>
-    `)
+    `,
+    )
     .join("");
   document.querySelectorAll(".category-filter-button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -2545,7 +2878,11 @@ function renderOrderDetails() {
         : "Visualização da comanda — edite o nome aqui se precisar.";
     }
   }
-  if (refs.detailCustomerSection && refs.detailCustomerSlotTop && refs.detailCustomerSlotBottom) {
+  if (
+    refs.detailCustomerSection &&
+    refs.detailCustomerSlotTop &&
+    refs.detailCustomerSlotBottom
+  ) {
     if (launchMode) {
       refs.detailCustomerSlotBottom.appendChild(refs.detailCustomerSection);
     } else {
@@ -2559,7 +2896,9 @@ function renderOrderDetails() {
     refs.orderTableGroup.classList.toggle("hidden", !state.config.useTables);
   }
   if (refs.orderTableInput) {
-    refs.orderTableInput.value = state.config.useTables ? order.table || "" : "";
+    refs.orderTableInput.value = state.config.useTables
+      ? order.table || ""
+      : "";
     refs.orderTableInput.disabled = isLocked;
     refs.orderTableInput.readOnly = isLocked;
   }
@@ -2569,7 +2908,10 @@ function renderOrderDetails() {
   }
   refs.saveCustomerButton?.classList.toggle("hidden", isLocked);
   refs.confirmDetailButton?.classList.toggle("hidden", isLocked);
-  refs.addFlowContent.classList.toggle("hidden", state.detailAction !== "add" || isLocked);
+  refs.addFlowContent.classList.toggle(
+    "hidden",
+    state.detailAction !== "add" || isLocked,
+  );
   refs.cancelConfirmBox.classList.toggle("hidden", !state.cancelConfirmOpen);
   refs.openCancelFlowButton.classList.toggle("hidden", isLocked);
   if (!isLocked) {
@@ -2582,14 +2924,19 @@ function renderOrderDetails() {
   }
 
   const filteredProducts = products.filter((product) => {
-    const byCategory = state.selectedCategory === "Todas" || product.category === state.selectedCategory;
-    const byName = product.name.toLowerCase().includes(state.productSearch.toLowerCase());
+    const byCategory =
+      state.selectedCategory === "Todas" ||
+      product.category === state.selectedCategory;
+    const byName = product.name
+      .toLowerCase()
+      .includes(state.productSearch.toLowerCase());
     return byCategory && byName;
   });
 
   refs.availableProductsList.innerHTML = filteredProducts.length
     ? filteredProducts
-      .map((product) => `
+        .map(
+          (product) => `
         <li class="rounded-xl border border-outline-variant/80 bg-surface-container-lowest/50 p-2">
           <div class="flex items-start justify-between gap-2">
             <p class="min-w-0 flex-1 text-sm font-semibold leading-snug text-on-surface">${product.name}</p>
@@ -2598,29 +2945,39 @@ function renderOrderDetails() {
           <p class="mt-0.5 text-xs text-on-surface-variant">${product.category} • ${formatCurrency(product.price)}</p>
           <button type="button" class="add-product-button mt-2 h-10 w-full select-none rounded-lg bg-primary text-sm font-semibold text-on-primary shadow-sm" data-product-id="${product.id}">Adicionar</button>
         </li>
-      `)
-      .join("")
+      `,
+        )
+        .join("")
     : "<li class='rounded-xl border border-slate-200 p-3 text-sm text-slate-500'>Nenhum produto encontrado.</li>";
 
   const items = order.items || [];
   const itemsHtml = items.length
     ? items
-      .map((item, index) => {
-        const showTimer =
-          item.requiresPrep && item.requestedAt && !item.deliveredAt && !isLocked;
-        const waitLabel =
-          item.requiresPrep && item.deliveredAt && item.requestedAt
-            ? `Entregue ${formatTimeShort(item.deliveredAt)}${
-              item.serviceSeconds != null
-                ? ` • espera ${formatDurationFromSeconds(item.serviceSeconds)}`
-                : ""
-            }`
-            : item.requiresPrep && item.deliveredAt
-              ? `Entregue ${formatTimeShort(item.deliveredAt)}`
-              : "";
-        const showDeliverBtn = !isLocked && item.requiresPrep && item.requestedAt && !item.deliveredAt;
-        const lineIdAttr = item.lineId ? ` data-line-id="${item.lineId}"` : "";
-        return `
+        .map((item, index) => {
+          const showTimer =
+            item.requiresPrep &&
+            item.requestedAt &&
+            !item.deliveredAt &&
+            !isLocked;
+          const waitLabel =
+            item.requiresPrep && item.deliveredAt && item.requestedAt
+              ? `Entregue ${formatTimeShort(item.deliveredAt)}${
+                  item.serviceSeconds != null
+                    ? ` • espera ${formatDurationFromSeconds(item.serviceSeconds)}`
+                    : ""
+                }`
+              : item.requiresPrep && item.deliveredAt
+                ? `Entregue ${formatTimeShort(item.deliveredAt)}`
+                : "";
+          const showDeliverBtn =
+            !isLocked &&
+            item.requiresPrep &&
+            item.requestedAt &&
+            !item.deliveredAt;
+          const lineIdAttr = item.lineId
+            ? ` data-line-id="${item.lineId}"`
+            : "";
+          return `
         <li class="rounded-xl border border-slate-200 p-2">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
@@ -2629,8 +2986,8 @@ function renderOrderDetails() {
               ${
                 showTimer
                   ? `<p class="order-line-timer mt-0.5 text-[11px] tabular-nums tracking-tight text-on-surface-variant"${lineIdAttr} data-requested-at="${item.requestedAt}">${formatElapsedClock(
-                    item.requestedAt
-                  )}</p>`
+                      item.requestedAt,
+                    )}</p>`
                   : ""
               }
               ${
@@ -2659,8 +3016,8 @@ function renderOrderDetails() {
             </div>
           </div>
         </li>`;
-      })
-      .join("")
+        })
+        .join("")
     : "<li class='rounded-xl border border-slate-200 p-3 text-sm text-slate-500'>Nenhum item lancado.</li>";
   refs.orderItemsList.innerHTML = itemsHtml;
   if (status === "Finalizado" && order.totalPaid != null) {
@@ -2686,14 +3043,20 @@ function renderOrderDetails() {
   });
 
   document.querySelectorAll(".qty-plus").forEach((button) => {
-    button.addEventListener("click", () => changeItemQty(Number(button.dataset.index), 1));
+    button.addEventListener("click", () =>
+      changeItemQty(Number(button.dataset.index), 1),
+    );
   });
   document.querySelectorAll(".qty-minus").forEach((button) => {
-    button.addEventListener("click", () => changeItemQty(Number(button.dataset.index), -1));
+    button.addEventListener("click", () =>
+      changeItemQty(Number(button.dataset.index), -1),
+    );
   });
 
   document.querySelectorAll(".mark-delivered-button").forEach((button) => {
-    button.addEventListener("click", () => markLineDelivered(button.dataset.lineId));
+    button.addEventListener("click", () =>
+      markLineDelivered(button.dataset.lineId),
+    );
   });
 
   syncOrderLineTimerElements();
@@ -2704,7 +3067,9 @@ function renderCheckoutSummary() {
   const order = getCurrentOrder();
   if (!order) return;
   const subtotal = calculateOrderSubtotal(order);
-  const feePercent = state.config.useServiceFee ? (Number(refs.serviceFeeInput.value) || 0) : 0;
+  const feePercent = state.config.useServiceFee
+    ? Number(refs.serviceFeeInput.value) || 0
+    : 0;
   const feeValue = subtotal * (feePercent / 100);
   const total = subtotal + feeValue;
 
@@ -2716,21 +3081,26 @@ function renderCheckoutSummary() {
 }
 
 function renderCheckoutPaymentMethods() {
-  const activeMethods = (state.config.paymentMethods || []).filter((method) => method.active);
+  const activeMethods = (state.config.paymentMethods || []).filter(
+    (method) => method.active,
+  );
   refs.checkoutPaymentMethodsList.innerHTML = activeMethods.length
     ? activeMethods
-      .map((method) => `
+        .map(
+          (method) => `
         <label class="flex h-touch-target-min items-center gap-2 rounded-xl border border-outline-variant px-3 text-sm">
           <input class="payment-method" type="checkbox" value="${method.name}" data-method-id="${method.id}">
           ${method.name}
         </label>
-      `)
-      .join("")
+      `,
+        )
+        .join("")
     : "<p class='col-span-2 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-sm text-on-surface-variant'>Nenhuma forma de pagamento ativa. Ative em Config.</p>";
 }
 
 function renderReports() {
-  if (!refs.reportsPicker || !refs.reportsDetail || !refs.reportsDetailBody) return;
+  if (!refs.reportsPicker || !refs.reportsDetail || !refs.reportsDetailBody)
+    return;
 
   const today = todayLocalYmd();
   if (!state.reportDateFrom) state.reportDateFrom = today;
@@ -2757,8 +3127,10 @@ function renderReports() {
     });
   }
 
-  if (refs.reportsDateFromInput) refs.reportsDateFromInput.value = state.reportDateFrom;
-  if (refs.reportsDateToInput) refs.reportsDateToInput.value = state.reportDateTo;
+  if (refs.reportsDateFromInput)
+    refs.reportsDateFromInput.value = state.reportDateFrom;
+  if (refs.reportsDateToInput)
+    refs.reportsDateToInput.value = state.reportDateTo;
 
   const fromYmd = state.reportDateFrom || today;
   const toYmd = state.reportDateTo || today;
@@ -2783,7 +3155,7 @@ function renderReports() {
     peakHour: "Horario de pico",
     weekday: "Dias da semana",
     shiftCloses: "Fechamentos de caixa",
-    cashClose: "Fechamento de caixa"
+    cashClose: "Fechamento de caixa",
   };
   const title = titleMap[state.selectedReport] || "Relatorio";
 
@@ -2810,17 +3182,19 @@ function renderReports() {
       <p class="text-xs uppercase text-on-surface-variant">${fromYmd === toYmd ? `Data ${fromYmd}` : `${fromYmd} a ${toYmd}`}</p>
       <p class="mt-2 text-[11px] text-on-surface-variant">Valores estimados: quando ha mais de uma forma no mesmo fechamento, o total e dividido igualmente entre elas.</p>
       <ul class="mt-3 space-y-2">
-        ${rows.length
-          ? rows
-            .map(
-              (row) => `
+        ${
+          rows.length
+            ? rows
+                .map(
+                  (row) => `
           <li class="flex justify-between rounded-lg border border-outline-variant px-3 py-2 text-sm">
             <span>${row.name}</span>
             <span class="font-bold text-primary">${formatCurrency(row.value)}</span>
-          </li>`
-            )
-            .join("")
-          : "<li class='text-sm text-on-surface-variant'>Nenhum pagamento no periodo.</li>"}
+          </li>`,
+                )
+                .join("")
+            : "<li class='text-sm text-on-surface-variant'>Nenhum pagamento no periodo.</li>"
+        }
       </ul>
     `;
   } else if (state.selectedReport === "products") {
@@ -2828,18 +3202,20 @@ function renderReports() {
     body = `
       <p class="text-xs uppercase text-on-surface-variant">${fromYmd === toYmd ? `Data ${fromYmd}` : `${fromYmd} a ${toYmd}`}</p>
       <ul class="mt-3 space-y-2">
-        ${top.length
-          ? top
-            .map(
-              (row) => `
+        ${
+          top.length
+            ? top
+                .map(
+                  (row) => `
           <li class="flex justify-between gap-2 rounded-lg border border-outline-variant px-3 py-2 text-sm">
             <span class="min-w-0 flex-1">${row.name}</span>
             <span class="shrink-0 font-semibold text-on-surface">${row.qty} un.</span>
             <span class="shrink-0 font-bold text-primary">${formatCurrency(row.revenue)}</span>
-          </li>`
-            )
-            .join("")
-          : "<li class='text-sm text-on-surface-variant'>Nenhum item no periodo.</li>"}
+          </li>`,
+                )
+                .join("")
+            : "<li class='text-sm text-on-surface-variant'>Nenhum item no periodo.</li>"
+        }
       </ul>
     `;
   } else if (state.selectedReport === "peakHour") {
@@ -2896,8 +3272,14 @@ function renderReports() {
     `;
   } else if (state.selectedReport === "shiftCloses") {
     const closed = loadClosedShiftsFiltered(fromYmd, toYmd);
-    const totalBruto = closed.reduce((s, sh) => s + shiftCloseReportSnapshot(sh).totalBruto, 0);
-    const totalOrders = closed.reduce((s, sh) => s + shiftCloseReportSnapshot(sh).finalizedOrdersCount, 0);
+    const totalBruto = closed.reduce(
+      (s, sh) => s + shiftCloseReportSnapshot(sh).totalBruto,
+      0,
+    );
+    const totalOrders = closed.reduce(
+      (s, sh) => s + shiftCloseReportSnapshot(sh).finalizedOrdersCount,
+      0,
+    );
     body = `
       <p class="text-xs text-on-surface-variant">
         Cada card e um <strong>caixa fechado</strong>. A data de referencia e o dia em que voce abriu (ex.: quinta, mesmo fechando sexta de madrugada).
@@ -2963,7 +3345,8 @@ function renderReports() {
       <p id="cashCloseFeedback" class="mt-2 min-h-[1rem] text-xs ${uiMsg?.type === "err" ? "text-error" : uiMsg?.type === "ok" ? "text-secondary" : uiMsg?.type === "warn" ? "text-primary" : "text-on-surface-variant"}">${uiMsg?.text || ""}</p>`;
     }
   } else {
-    body = "<p class='text-sm text-on-surface-variant'>Selecione um tipo na lista.</p>";
+    body =
+      "<p class='text-sm text-on-surface-variant'>Selecione um tipo na lista.</p>";
   }
 
   refs.reportsDetailBody.innerHTML = `
@@ -2994,10 +3377,13 @@ function renderAll() {
 }
 
 async function openDetailDialog(orderId, options = {}) {
-  const row = loadOrders().find((entry) => String(entry.id) === String(orderId));
+  const row = loadOrders().find(
+    (entry) => String(entry.id) === String(orderId),
+  );
   const status = row ? normalizeOrderStatus(row.status) : "Aberta";
   const isViewOnly = status === "Finalizado" || status === "Cancelada";
-  if (!isViewOnly && status === "Aberta" && !(await ensureOpenShiftAuto())) return;
+  if (!isViewOnly && status === "Aberta" && !(await ensureOpenShiftAuto()))
+    return;
 
   if (isPendingLocalOrder()) abandonPendingOrder();
   state.selectedOrderId = orderId;
@@ -3023,19 +3409,24 @@ async function beginFinalizeFlowForOrderId(orderId) {
 
   if (isPendingLocalOrder()) abandonPendingOrder();
   state.selectedOrderId = orderId;
-  const order = loadOrders().find((entry) => String(entry.id) === String(orderId));
+  const order = loadOrders().find(
+    (entry) => String(entry.id) === String(orderId),
+  );
   if (!order || !order.items?.length) return;
 
   const customerName = (order.customer || "").trim();
   if (!customerName) {
     void openDetailDialog(orderId, { detailAction: null });
-    refs.detailCustomerFeedback.textContent = "Informe o nome do cliente antes de finalizar.";
+    refs.detailCustomerFeedback.textContent =
+      "Informe o nome do cliente antes de finalizar.";
     return;
   }
 
   refs.detailCustomerFeedback.textContent = "";
   refs.checkoutFeedback.textContent = "";
-  refs.serviceFeeInput.value = String(state.config.useServiceFee ? (order.serviceFeePercent || 10) : 0);
+  refs.serviceFeeInput.value = String(
+    state.config.useServiceFee ? order.serviceFeePercent || 10 : 0,
+  );
   renderCheckoutPaymentMethods();
   document.querySelectorAll(".payment-method").forEach((checkbox) => {
     checkbox.checked = order.paymentMethods?.includes(checkbox.value) || false;
@@ -3059,10 +3450,13 @@ function findMergeTargetLineForProduct(items, productId) {
 
 async function addItemToOrder(productId) {
   const products = loadProducts();
-  const product = products.find((entry) => String(entry.id) === String(productId));
+  const product = products.find(
+    (entry) => String(entry.id) === String(productId),
+  );
   if (!product) return;
 
-  const requiresPrep = product.requiresPrep ?? categoryRequiresPrep(product.category);
+  const requiresPrep =
+    product.requiresPrep ?? categoryRequiresPrep(product.category);
 
   if (isPendingLocalOrder()) {
     await _pendingOrderPostChain;
@@ -3090,7 +3484,7 @@ async function addItemToOrder(productId) {
           requestedAt: new Date().toISOString(),
           deliveredAt: null,
           serviceSeconds: null,
-          prepStatus: requiresPrep ? "Aguardando" : null
+          prepStatus: requiresPrep ? "Aguardando" : null,
         });
       }
       order.everHadItems = true;
@@ -3111,7 +3505,9 @@ async function addItemToOrder(productId) {
   }
 
   const orders = loadOrders();
-  const order = orders.find((entry) => String(entry.id) === String(state.selectedOrderId));
+  const order = orders.find(
+    (entry) => String(entry.id) === String(state.selectedOrderId),
+  );
   if (!order) return;
 
   const existing = findMergeTargetLineForProduct(order.items, product.id);
@@ -3128,7 +3524,7 @@ async function addItemToOrder(productId) {
       requestedAt: new Date().toISOString(),
       deliveredAt: null,
       serviceSeconds: null,
-      prepStatus: requiresPrep ? "Aguardando" : null
+      prepStatus: requiresPrep ? "Aguardando" : null,
     });
   }
   order.everHadItems = true;
@@ -3156,7 +3552,7 @@ function changeItemQty(itemIndex, delta) {
       requestedAt: new Date().toISOString(),
       deliveredAt: null,
       serviceSeconds: null,
-      prepStatus: item.requiresPrep ? "Aguardando" : null
+      prepStatus: item.requiresPrep ? "Aguardando" : null,
     });
   } else {
     item.qty += delta;
@@ -3185,9 +3581,11 @@ function changeItemQty(itemIndex, delta) {
 
 function getSelectedProductStockComponentIds() {
   if (!refs.productStockComponentsList) return [];
-  return [...refs.productStockComponentsList.querySelectorAll(".product-stock-component-checkbox:checked")].map(
-    (el) => String(el.value)
-  );
+  return [
+    ...refs.productStockComponentsList.querySelectorAll(
+      ".product-stock-component-checkbox:checked",
+    ),
+  ].map((el) => String(el.value));
 }
 
 function refreshProductStockDisplayOptions() {
@@ -3203,11 +3601,15 @@ function refreshProductStockDisplayOptions() {
         return `<option value="${id}">${p ? p.name : id}</option>`;
       })
       .join("");
-  if (current && selected.includes(current)) refs.productStockDisplaySelect.value = current;
+  if (current && selected.includes(current))
+    refs.productStockDisplaySelect.value = current;
 }
 
 function renderProductSpecialPanel(editingProductId) {
-  const editingId = editingProductId != null ? String(editingProductId) : String(refs.productIdInput?.value || "");
+  const editingId =
+    editingProductId != null
+      ? String(editingProductId)
+      : String(refs.productIdInput?.value || "");
   const product = editingId ? findProductById(editingId) : null;
   const selectedIds = new Set(normalizeStockComponentIds(product || {}));
 
@@ -3225,15 +3627,20 @@ function renderProductSpecialPanel(editingProductId) {
             <span class="text-sm text-on-surface">${entry.name}</span>
             <span class="ml-auto text-[10px] tabular-nums text-on-surface-variant">${getProductStock(entry.id)} un.</span>
           </label>
-        </li>`
+        </li>`,
           )
           .join("")
       : "<li class='text-xs text-on-surface-variant'>Cadastre outros produtos para vincular insumos.</li>";
   }
 
   refreshProductStockDisplayOptions();
-  if (product?.stockDisplayProductId && selectedIds.has(String(product.stockDisplayProductId))) {
-    refs.productStockDisplaySelect.value = String(product.stockDisplayProductId);
+  if (
+    product?.stockDisplayProductId &&
+    selectedIds.has(String(product.stockDisplayProductId))
+  ) {
+    refs.productStockDisplaySelect.value = String(
+      product.stockDisplayProductId,
+    );
   }
 }
 
@@ -3267,33 +3674,50 @@ function readProductSpecialFromForm() {
         return {
           isSpecial: !!existing.isSpecial,
           stockComponentIds: normalizeStockComponentIds(existing),
-          stockDisplayProductId: existing.stockDisplayProductId || null
+          stockDisplayProductId: existing.stockDisplayProductId || null,
         };
       }
     }
-    return { isSpecial: false, stockComponentIds: [], stockDisplayProductId: null };
+    return {
+      isSpecial: false,
+      stockComponentIds: [],
+      stockDisplayProductId: null,
+    };
   }
   const isSpecial = !!refs.productSpecialInput?.checked;
   if (!isSpecial) {
-    return { isSpecial: false, stockComponentIds: [], stockDisplayProductId: null };
+    return {
+      isSpecial: false,
+      stockComponentIds: [],
+      stockDisplayProductId: null,
+    };
   }
   const stockComponentIds = getSelectedProductStockComponentIds();
-  let stockDisplayProductId = refs.productStockDisplaySelect?.value ? String(refs.productStockDisplaySelect.value) : null;
-  if (stockDisplayProductId && !stockComponentIds.includes(stockDisplayProductId)) {
+  let stockDisplayProductId = refs.productStockDisplaySelect?.value
+    ? String(refs.productStockDisplaySelect.value)
+    : null;
+  if (
+    stockDisplayProductId &&
+    !stockComponentIds.includes(stockDisplayProductId)
+  ) {
     stockDisplayProductId = stockComponentIds[0] || null;
   }
   return { isSpecial: true, stockComponentIds, stockDisplayProductId };
 }
 
 function fillProductForm(productId) {
-  const product = loadProducts().find((entry) => String(entry.id) === String(productId));
+  const product = loadProducts().find(
+    (entry) => String(entry.id) === String(productId),
+  );
   if (!product) return;
   state.selectedTab = "settingsTab";
   state.selectedSettingsTab = "products";
   renderAll();
   refs.productIdInput.value = product.id;
   refs.productNameInput.value = product.name;
-  const hasCategoryOption = [...refs.productCategoryInput.options].some((option) => option.value === product.category);
+  const hasCategoryOption = [...refs.productCategoryInput.options].some(
+    (option) => option.value === product.category,
+  );
   if (!hasCategoryOption) {
     const option = document.createElement("option");
     option.value = product.category;
@@ -3302,8 +3726,10 @@ function fillProductForm(productId) {
   }
   refs.productCategoryInput.value = product.category;
   refs.productPriceInput.value = product.price;
-  refs.productRequiresPrepInput.checked = product.requiresPrep ?? categoryRequiresPrep(product.category);
-  if (refs.productSpecialInput) refs.productSpecialInput.checked = !!product.isSpecial;
+  refs.productRequiresPrepInput.checked =
+    product.requiresPrep ?? categoryRequiresPrep(product.category);
+  if (refs.productSpecialInput)
+    refs.productSpecialInput.checked = !!product.isSpecial;
   renderProductSpecialPanel(product.id);
   syncStockControlDependentUi();
   refs.productSubmitButton.textContent = "Atualizar";
@@ -3319,13 +3745,20 @@ function clearProductForm() {
 }
 
 function deleteCategory(categoryName) {
-  const hasProductsUsingCategory = loadProducts().some((product) => product.category === categoryName);
+  const hasProductsUsingCategory = loadProducts().some(
+    (product) => product.category === categoryName,
+  );
   if (hasProductsUsingCategory) {
-    refs.categoryFeedback.textContent = "Nao e possivel excluir: existem produtos nessa categoria.";
+    refs.categoryFeedback.textContent =
+      "Nao e possivel excluir: existem produtos nessa categoria.";
     return;
   }
-  state.config.categories = state.config.categories.filter((category) => category !== categoryName);
-  state.config.prepCategories = (state.config.prepCategories || []).filter((category) => category !== categoryName);
+  state.config.categories = state.config.categories.filter(
+    (category) => category !== categoryName,
+  );
+  state.config.prepCategories = (state.config.prepCategories || []).filter(
+    (category) => category !== categoryName,
+  );
   saveConfig(state.config);
   refs.categoryFeedback.textContent = "";
   renderAll();
@@ -3334,18 +3767,25 @@ function deleteCategory(categoryName) {
 function deletePaymentMethod(methodId) {
   const methods = state.config.paymentMethods || [];
   if (methods.length <= 1) {
-    refs.paymentMethodFeedback.textContent = "Mantenha ao menos uma forma de pagamento.";
+    refs.paymentMethodFeedback.textContent =
+      "Mantenha ao menos uma forma de pagamento.";
     return;
   }
-  state.config.paymentMethods = methods.filter((method) => method.id !== methodId);
+  state.config.paymentMethods = methods.filter(
+    (method) => method.id !== methodId,
+  );
   saveConfig(state.config);
   refs.paymentMethodFeedback.textContent = "";
   renderAll();
 }
 
 function deleteProduct(productId) {
-  const products = loadProducts().filter((product) => String(product.id) !== String(productId));
-  void deleteProductRemote(productId).catch((e) => console.error("[JANA] deleteProduct", e));
+  const products = loadProducts().filter(
+    (product) => String(product.id) !== String(productId),
+  );
+  void deleteProductRemote(productId).catch((e) =>
+    console.error("[JANA] deleteProduct", e),
+  );
   saveProducts(products);
   renderAll();
 }
@@ -3374,7 +3814,7 @@ function bindGlobalButtonPressFeedbackOnce() {
       globalButtonPressTarget = btn;
       btn.classList.add("is-pressed");
     },
-    true
+    true,
   );
 
   document.addEventListener("pointerup", release, true);
@@ -3413,16 +3853,21 @@ function bindEvents() {
         refs.loginFeedback.textContent = "Supabase nao inicializado.";
         return;
       }
-      const { data: signData, error } = await sb.auth.signInWithPassword({ email, password });
+      const { data: signData, error } = await sb.auth.signInWithPassword({
+        email,
+        password,
+      });
       if (error) {
-        refs.loginFeedback.textContent = error.message || "Credenciais invalidas.";
+        refs.loginFeedback.textContent =
+          error.message || "Credenciais invalidas.";
         return;
       }
       refs.loginForm.reset();
       if (signData.session) {
         await applySupabaseSession(signData.session);
       } else {
-        refs.loginFeedback.textContent = "Login ok mas sessao vazia. Atualize a pagina.";
+        refs.loginFeedback.textContent =
+          "Login ok mas sessao vazia. Atualize a pagina.";
         console.warn("[JANA] signInWithPassword sem session no retorno");
       }
     } catch (e) {
@@ -3485,7 +3930,7 @@ function bindEvents() {
         console.error(e);
         state.cashCloseUiMessage = {
           type: "err",
-          text: (e && e.message) || "Nao foi possivel abrir o caixa."
+          text: (e && e.message) || "Nao foi possivel abrir o caixa.",
         };
         renderDashboard();
       }
@@ -3495,7 +3940,9 @@ function bindEvents() {
   refs.newOrderButton.addEventListener("click", () => {
     void createNewOrderAndOpen();
   });
-  refs.closeOrderDialogButton.addEventListener("click", () => refs.orderDialog.close());
+  refs.closeOrderDialogButton.addEventListener("click", () =>
+    refs.orderDialog.close(),
+  );
 
   refs.bottomTabs.forEach((button) => {
     button.addEventListener("click", () => {
@@ -3546,17 +3993,25 @@ function bindEvents() {
       void (async () => {
         try {
           if (!shift) {
-            state.cashCloseUiMessage = { type: "err", text: "Nenhum caixa aberto." };
+            state.cashCloseUiMessage = {
+              type: "err",
+              text: "Nenhum caixa aberto.",
+            };
             renderReports();
             return;
           }
-          const refInput = document.querySelector("#cashCloseReferenceDateInput");
-          if (refInput?.value) state.cashCloseReferenceDateYmd = refInput.value.trim();
-          const refYmd = state.cashCloseReferenceDateYmd || suggestReferenceDateForShift(shift);
+          const refInput = document.querySelector(
+            "#cashCloseReferenceDateInput",
+          );
+          if (refInput?.value)
+            state.cashCloseReferenceDateYmd = refInput.value.trim();
+          const refYmd =
+            state.cashCloseReferenceDateYmd ||
+            suggestReferenceDateForShift(shift);
           if (!isValidYmd(refYmd)) {
             state.cashCloseUiMessage = {
               type: "err",
-              text: "Informe o dia de referencia do caixa (campo acima)."
+              text: "Informe o dia de referencia do caixa (campo acima).",
             };
             renderReports();
             return;
@@ -3570,14 +4025,17 @@ function bindEvents() {
               : "";
             state.cashCloseUiMessage = {
               type: "warn",
-              text: `${openWarn}confirme o fechamento do caixa referente a ${refLabel}. Clique novamente em "Confirmar fechamento".`
+              text: `${openWarn}confirme o fechamento do caixa referente a ${refLabel}. Clique novamente em "Confirmar fechamento".`,
             };
             renderReports();
             return;
           }
           await persistShiftClose(shift, refYmd);
           state.cashClosePendingClose = false;
-          state.cashCloseUiMessage = { type: "ok", text: "Caixa fechado com sucesso." };
+          state.cashCloseUiMessage = {
+            type: "ok",
+            text: "Caixa fechado com sucesso.",
+          };
           renderDashboard();
           renderReports();
           if (!refs.cashCloseHistoryDialog?.classList.contains("hidden")) {
@@ -3588,7 +4046,7 @@ function bindEvents() {
           state.cashClosePendingClose = false;
           state.cashCloseUiMessage = {
             type: "err",
-            text: err?.message || "Nao foi possivel fechar o caixa."
+            text: err?.message || "Nao foi possivel fechar o caixa.",
           };
           renderReports();
         }
@@ -3615,8 +4073,14 @@ function bindEvents() {
 
   refs.settingsTabsScroll?.addEventListener("scroll", updateSettingsTabsHints);
   refs.categoryButtons?.addEventListener("scroll", updateCategoryTabsHints);
-  refs.productAdminCategoryButtons?.addEventListener("scroll", updateProductAdminCategoryTabsHints);
-  refs.stockAdminCategoryButtons?.addEventListener("scroll", updateStockAdminCategoryTabsHints);
+  refs.productAdminCategoryButtons?.addEventListener(
+    "scroll",
+    updateProductAdminCategoryTabsHints,
+  );
+  refs.stockAdminCategoryButtons?.addEventListener(
+    "scroll",
+    updateStockAdminCategoryTabsHints,
+  );
   window.addEventListener("resize", updateSettingsTabsHints);
   window.addEventListener("resize", updateCategoryTabsHints);
   window.addEventListener("resize", updateProductAdminCategoryTabsHints);
@@ -3633,7 +4097,8 @@ function bindEvents() {
   refs.confirmDetailButton.addEventListener("click", () => {
     const customerName = refs.detailCustomerInput.value.trim();
     if (!customerName) {
-      refs.detailCustomerFeedback.textContent = "Informe o nome do cliente para confirmar.";
+      refs.detailCustomerFeedback.textContent =
+        "Informe o nome do cliente para confirmar.";
       refs.detailCustomerInput.focus();
       return;
     }
@@ -3653,7 +4118,9 @@ function bindEvents() {
     }
     if (order) {
       const orders = loadOrders();
-      const target = orders.find((entry) => String(entry.id) === String(order.id));
+      const target = orders.find(
+        (entry) => String(entry.id) === String(order.id),
+      );
       if (target) {
         target.customer = customerName;
         if (state.config.useTables && refs.orderTableInput) {
@@ -3673,7 +4140,8 @@ function bindEvents() {
     if (!order) return;
     const customerName = refs.detailCustomerInput.value.trim();
     if (!customerName) {
-      refs.detailCustomerFeedback.textContent = "Nome do cliente é obrigatório.";
+      refs.detailCustomerFeedback.textContent =
+        "Nome do cliente é obrigatório.";
       refs.detailCustomerInput.focus();
       return;
     }
@@ -3687,7 +4155,9 @@ function bindEvents() {
       return;
     }
     const orders = loadOrders();
-    const target = orders.find((entry) => String(entry.id) === String(order.id));
+    const target = orders.find(
+      (entry) => String(entry.id) === String(order.id),
+    );
     if (!target) return;
     target.customer = customerName;
     if (state.config.useTables && refs.orderTableInput) {
@@ -3720,12 +4190,16 @@ function bindEvents() {
     }
 
     const orders = loadOrders();
-    const targetIndex = orders.findIndex((entry) => String(entry.id) === String(state.selectedOrderId));
+    const targetIndex = orders.findIndex(
+      (entry) => String(entry.id) === String(state.selectedOrderId),
+    );
     if (targetIndex < 0) return;
     const target = orders[targetIndex];
-    if (target.id === undefined || target.id === null || target.id === "") return;
+    if (target.id === undefined || target.id === null || target.id === "")
+      return;
 
-    const temItensNaComanda = Array.isArray(target.items) && target.items.length > 0;
+    const temItensNaComanda =
+      Array.isArray(target.items) && target.items.length > 0;
 
     if (!temItensNaComanda) {
       try {
@@ -3760,13 +4234,17 @@ function bindEvents() {
     refs.checkoutFeedback.textContent = "";
     renderAll();
   });
-  refs.closeCashCloseHistoryButton?.addEventListener("click", closeCashCloseHistoryDialog);
+  refs.closeCashCloseHistoryButton?.addEventListener(
+    "click",
+    closeCashCloseHistoryDialog,
+  );
   refs.cashCloseHistoryBody?.addEventListener("click", (e) => {
     const button = e.target.closest(".cash-close-history-toggle");
     if (!button) return;
     const id = String(button.dataset.closeId || "");
     if (!id) return;
-    state.cashCloseHistoryExpandedId = state.cashCloseHistoryExpandedId === id ? null : id;
+    state.cashCloseHistoryExpandedId =
+      state.cashCloseHistoryExpandedId === id ? null : id;
     renderCashCloseHistoryOverlay();
   });
   refs.serviceFeeInput.addEventListener("input", renderCheckoutSummary);
@@ -3774,22 +4252,30 @@ function bindEvents() {
   refs.confirmCheckoutButton.addEventListener("click", () => {
     const order = getCurrentOrder();
     if (!order) return;
-    const paymentMethods = [...document.querySelectorAll(".payment-method:checked")].map((checkbox) => checkbox.value);
+    const paymentMethods = [
+      ...document.querySelectorAll(".payment-method:checked"),
+    ].map((checkbox) => checkbox.value);
     if (!paymentMethods.length) {
-      refs.checkoutFeedback.textContent = "Selecione ao menos uma forma de pagamento.";
+      refs.checkoutFeedback.textContent =
+        "Selecione ao menos uma forma de pagamento.";
       return;
     }
     const subtotal = calculateOrderSubtotal(order);
-    const serviceFeePercent = state.config.useServiceFee ? (Number(refs.serviceFeeInput.value) || 0) : 0;
+    const serviceFeePercent = state.config.useServiceFee
+      ? Number(refs.serviceFeeInput.value) || 0
+      : 0;
     const serviceFee = subtotal * (serviceFeePercent / 100);
     const totalPaid = subtotal + serviceFee;
 
     const orders = loadOrders();
-    const target = orders.find((entry) => String(entry.id) === String(order.id));
+    const target = orders.find(
+      (entry) => String(entry.id) === String(order.id),
+    );
     if (!target) return;
     const openShift = getOpenShift();
     if (!openShift) {
-      refs.checkoutFeedback.textContent = "Abra o caixa no Inicio antes de finalizar a comanda.";
+      refs.checkoutFeedback.textContent =
+        "Abra o caixa no Inicio antes de finalizar a comanda.";
       return;
     }
     target.status = "Finalizado";
@@ -3816,15 +4302,26 @@ function bindEvents() {
       requiresPrep: refs.productRequiresPrepInput.checked,
       isSpecial: special.isSpecial,
       stockComponentIds: special.stockComponentIds,
-      stockDisplayProductId: special.stockDisplayProductId
+      stockDisplayProductId: special.stockDisplayProductId,
     };
-    if (!productData.name || !productData.category || Number.isNaN(productData.price)) return;
-    if (isStockControlEnabled() && productData.isSpecial && !productData.stockComponentIds.length) {
+    if (
+      !productData.name ||
+      !productData.category ||
+      Number.isNaN(productData.price)
+    )
+      return;
+    if (
+      isStockControlEnabled() &&
+      productData.isSpecial &&
+      !productData.stockComponentIds.length
+    ) {
       alert("Item especial: marque ao menos um insumo para debitar o estoque.");
       return;
     }
     if (refs.productIdInput.value) {
-      const target = products.find((product) => String(product.id) === String(refs.productIdInput.value));
+      const target = products.find(
+        (product) => String(product.id) === String(refs.productIdInput.value),
+      );
       if (target) {
         target.name = productData.name;
         target.category = productData.category;
@@ -3858,9 +4355,13 @@ function bindEvents() {
 
   refs.clearProductFormButton.addEventListener("click", clearProductForm);
 
-  refs.productSpecialInput?.addEventListener("change", syncProductSpecialPanelVisibility);
+  refs.productSpecialInput?.addEventListener(
+    "change",
+    syncProductSpecialPanelVisibility,
+  );
   refs.productStockComponentsList?.addEventListener("change", (e) => {
-    if (e.target.classList?.contains("product-stock-component-checkbox")) refreshProductStockDisplayOptions();
+    if (e.target.classList?.contains("product-stock-component-checkbox"))
+      refreshProductStockDisplayOptions();
   });
 
   refs.productAdminCategoryButtons?.addEventListener("click", (e) => {
@@ -3901,7 +4402,9 @@ function bindEvents() {
     const name = refs.categoryNameInput.value.trim();
     if (!name) return;
 
-    const exists = state.config.categories.some((category) => category.toLowerCase() === name.toLowerCase());
+    const exists = state.config.categories.some(
+      (category) => category.toLowerCase() === name.toLowerCase(),
+    );
     if (exists) {
       refs.categoryFeedback.textContent = "Categoria ja cadastrada.";
       return;
@@ -3919,16 +4422,19 @@ function bindEvents() {
     const name = refs.paymentMethodNameInput.value.trim();
     if (!name) return;
 
-    const exists = (state.config.paymentMethods || []).some((method) => method.name.toLowerCase() === name.toLowerCase());
+    const exists = (state.config.paymentMethods || []).some(
+      (method) => method.name.toLowerCase() === name.toLowerCase(),
+    );
     if (exists) {
-      refs.paymentMethodFeedback.textContent = "Forma de pagamento ja cadastrada.";
+      refs.paymentMethodFeedback.textContent =
+        "Forma de pagamento ja cadastrada.";
       return;
     }
 
     state.config.paymentMethods.push({
       id: crypto.randomUUID(),
       name,
-      active: true
+      active: true,
     });
     saveConfig(state.config);
     refs.paymentMethodForm.reset();
@@ -3941,7 +4447,9 @@ function bindEvents() {
   });
 
   refs.reopenSearchButton?.addEventListener("click", () => renderReopenPanel());
-  refs.reopenFilterDateInput?.addEventListener("change", () => renderReopenPanel());
+  refs.reopenFilterDateInput?.addEventListener("change", () =>
+    renderReopenPanel(),
+  );
   refs.reopenShiftUndoButton?.addEventListener("click", () => {
     void (async () => {
       try {
@@ -3952,7 +4460,10 @@ function bindEvents() {
         }
         if (!state.reopenShiftPendingConfirm) {
           state.reopenShiftPendingConfirm = true;
-          setReopenShiftFeedback("warn", "Confirmar? O ultimo caixa fechado volta a ficar aberto (o mesmo turno).");
+          setReopenShiftFeedback(
+            "warn",
+            "Confirmar? O ultimo caixa fechado volta a ficar aberto (o mesmo turno).",
+          );
           renderReopenShiftPanel();
           return;
         }
@@ -3960,7 +4471,9 @@ function bindEvents() {
         state.reopenShiftPendingConfirm = false;
         setReopenShiftFeedback(
           ok ? "ok" : "err",
-          ok ? "Caixa reaberto. Confira no Inicio." : "Nao foi possivel desfazer o fechamento."
+          ok
+            ? "Caixa reaberto. Confira no Inicio."
+            : "Nao foi possivel desfazer o fechamento.",
         );
         renderDashboard();
         renderReports();
@@ -3968,7 +4481,10 @@ function bindEvents() {
       } catch (err) {
         console.error(err);
         state.reopenShiftPendingConfirm = false;
-        setReopenShiftFeedback("err", err?.message || "Nao foi possivel reabrir o caixa.");
+        setReopenShiftFeedback(
+          "err",
+          err?.message || "Nao foi possivel reabrir o caixa.",
+        );
         renderReopenShiftPanel();
       }
     })();
@@ -4001,7 +4517,7 @@ function bindIosDoubleTapBlocker() {
       if (now - lastTouchEnd < 350) e.preventDefault();
       lastTouchEnd = now;
     },
-    { passive: false }
+    { passive: false },
   );
   document.addEventListener("gesturestart", (e) => e.preventDefault());
 }
@@ -4028,7 +4544,7 @@ function bindPullToRefresh(scroller) {
       startY = e.touches[0].clientY;
       maxPull = 0;
     },
-    { passive: true }
+    { passive: true },
   );
   el.addEventListener(
     "touchmove",
@@ -4042,7 +4558,7 @@ function bindPullToRefresh(scroller) {
       const delta = y - startY;
       if (delta > 0) maxPull = Math.max(maxPull, delta);
     },
-    { passive: true }
+    { passive: true },
   );
   el.addEventListener(
     "touchend",
@@ -4051,7 +4567,7 @@ function bindPullToRefresh(scroller) {
       tracking = false;
       maxPull = 0;
     },
-    { passive: true }
+    { passive: true },
   );
 }
 
@@ -4077,7 +4593,7 @@ async function init() {
     if (!supabase) throw new Error("client");
 
     const {
-      data: { session: existingSession }
+      data: { session: existingSession },
     } = await supabase.auth.getSession();
     if (existingSession) {
       await applySupabaseSession(existingSession);
@@ -4289,7 +4805,7 @@ if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
     state,
     refs,
     PENDING_ORDER_ID,
-    THEME_PRESETS
+    THEME_PRESETS,
   });
 }
 
