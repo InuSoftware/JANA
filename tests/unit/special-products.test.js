@@ -82,3 +82,60 @@ describe("itens especiais (compostos)", () => {
     expect(j.getProductStock(PRODUCT_B.id)).toBe(5);
   });
 });
+
+describe("changeItemQty com item especial", () => {
+  let j;
+
+  const cachorroLine = {
+    lineId: "line-cq-1",
+    productId: CACHORRO.id,
+    name: CACHORRO.name,
+    price: CACHORRO.price,
+    qty: 1,
+    requiresPrep: true,
+    requestedAt: "2026-05-15T19:00:00.000Z",
+    deliveredAt: null,
+    serviceSeconds: null,
+    prepStatus: "Aguardando"
+  };
+
+  beforeEach(() => {
+    j = loadJana();
+    seedProducts(j, [CHURRASCO, PAO, CACHORRO]);
+    attachSupabaseMock(j, createSupabaseMock());
+  });
+
+  it("incrementa qty e debita todos os insumos", () => {
+    const order = makeOrder({ id: "o1", items: [{ ...cachorroLine }] });
+    seedOrders(j, [order]);
+    j.state.selectedOrderId = order.id;
+
+    j.changeItemQty(0, 1);
+
+    expect(j.getCurrentOrder().items[0].qty).toBe(2);
+    expect(j.getProductStock(CHURRASCO.id)).toBe(9);
+    expect(j.getProductStock(PAO.id)).toBe(4);
+    expect(j.getProductStock(CACHORRO.id)).toBe(0);
+  });
+
+  it("reduz qty e devolve insumos; remove linha ao zerar", () => {
+    const order = makeOrder({
+      id: "o1",
+      items: [{ ...cachorroLine, qty: 2 }]
+    });
+    seedOrders(j, [order]);
+    j.state.selectedOrderId = order.id;
+    j.setProductStockLocal(CHURRASCO.id, 8);
+    j.setProductStockLocal(PAO.id, 3);
+
+    j.changeItemQty(0, -1);
+    expect(j.getCurrentOrder().items[0].qty).toBe(1);
+    expect(j.getProductStock(CHURRASCO.id)).toBe(9);
+    expect(j.getProductStock(PAO.id)).toBe(4);
+
+    j.changeItemQty(0, -1);
+    expect(j.getCurrentOrder().items).toHaveLength(0);
+    expect(j.getProductStock(CHURRASCO.id)).toBe(10);
+    expect(j.getProductStock(PAO.id)).toBe(5);
+  });
+});
