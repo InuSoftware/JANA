@@ -341,21 +341,19 @@ function isDuplicateOfShift(dailyRow, shiftRow) {
 function loadAllClosedSessions() {
   const fromShifts = loadShifts().filter((s) => s.status === "fechado");
   const dailyRows = state.cache.dailyCloses || [];
-  const legacy = dailyRows
-    .map(dailyCloseRowToShiftLike)
-    .filter(
-      (leg) =>
-        !fromShifts.some((sh) =>
-          isDuplicateOfShift(
-            {
-              dateYmd: leg.referenceDate,
-              closedAt: leg.endedAt,
-              id: String(leg.id).replace(/^legacy-dc-/, ""),
-            },
-            sh,
-          ),
+  const legacy = dailyRows.map(dailyCloseRowToShiftLike).filter(
+    (leg) =>
+      !fromShifts.some((sh) =>
+        isDuplicateOfShift(
+          {
+            dateYmd: leg.referenceDate,
+            closedAt: leg.endedAt,
+            id: String(leg.id).replace(/^legacy-dc-/, ""),
+          },
+          sh,
         ),
-    );
+      ),
+  );
   return [...fromShifts, ...legacy].sort((a, b) => {
     const refCmp = (b.referenceDate || "").localeCompare(a.referenceDate || "");
     if (refCmp !== 0) return refCmp;
@@ -2684,7 +2682,7 @@ function renderStockAdmin() {
           ? findProductById(product.stockDisplayProductId)
           : null;
         const displayNote = displayProduct
-          ? ` (insumo: ${displayProduct.name})`
+          ? ` (Insumo: ${displayProduct.name})`
           : normalizeStockComponentIds(product).length > 0
             ? " (menor saldo entre os insumos)"
             : "";
