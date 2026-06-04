@@ -3,7 +3,6 @@ http://0.0.0.0:4173
 eruda é o debuger de telefone
 
 
-
 # 1. Faça suas alterações
 git add .
 git commit -m "minha alteração"
@@ -11,17 +10,17 @@ git commit -m "minha alteração"
 # 2. Subir SOMENTE para homologação
 git push homologacao main
 
-# 3. Teste no GitHub Pages da homologação
-# https://0xpaulo.github.io/JANA
-
 # 4. Só quando estiver satisfeito, subir para produção
 git push producao main
 
+npm test roda tudo 
 
-"Com base na estrutura do banco que você acabou de ler via MCP e no meu arquivo index.html
- (ou mude para o nome do seu arquivo JS atual), crie o arquivo .spec/comandas.spec.md.
-  Escreva a especificação completa de como o sistema atual funciona, listando os
-   campos obrigatórios e as regras de negócio que já existem."
+# 1. Enquanto desenvolve (mais rápido)
+npm run test:watch
 
+# 2. Antes de dar commit
+npm run test:fast   # primeiro
+npm run test:slow   # depois (se passou o rápido)
 
-GOOGLE  AIzaSyBCwQv4udxAv_UhOnhtSNvoUjE4z8zGHmw
+# 3. No CI (GitHub Actions, GitLab CI, etc.)
+npm test     

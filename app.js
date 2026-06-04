@@ -53,6 +53,15 @@ async function getSupabase() {
   return supabaseClient;
 }
 
+/** Apenas para testes de regressão (via __JANA_REGISTER_TEST_EXPORTS__). */
+function injectSupabaseClientForTests(client) {
+  supabaseClient = client;
+}
+
+function resetSupabaseClientForTests() {
+  supabaseClient = null;
+}
+
 function defaultConfigPayload() {
   return {
     id: 1,
@@ -70,6 +79,24 @@ function defaultConfigPayload() {
   };
 }
 
+function normalizeStockComponentIds(productOrIds) {
+  const raw =
+    productOrIds == null
+      ? []
+      : Array.isArray(productOrIds)
+        ? productOrIds
+        : productOrIds.stockComponentIds ?? productOrIds.stock_component_ids ?? [];
+  const seen = new Set();
+  const out = [];
+  for (const id of raw) {
+    const s = String(id || "").trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
 function productRowToApp(row, stockQty) {
   return {
     id: row.id,
@@ -77,18 +104,55 @@ function productRowToApp(row, stockQty) {
     category: row.category,
     price: Number(row.price),
     requiresPrep: row.requires_prep === true,
+    isSpecial: row.is_special === true,
+    stockComponentIds: normalizeStockComponentIds(row.stock_component_ids),
+    stockDisplayProductId: row.stock_display_product_id ? String(row.stock_display_product_id) : null,
     stock: stockQty != null ? Math.trunc(Number(stockQty) || 0) : 0
   };
 }
 
 function productToRow(p) {
+  const componentIds = normalizeStockComponentIds(p);
+  let displayId = p.stockDisplayProductId ? String(p.stockDisplayProductId) : null;
+  if (displayId && !componentIds.includes(displayId)) displayId = null;
   return {
     id: p.id,
     name: p.name,
     category: p.category,
     price: p.price,
-    requires_prep: p.requiresPrep === true
+    requires_prep: p.requiresPrep === true,
+    is_special: p.isSpecial === true,
+    stock_component_ids: componentIds,
+    stock_display_product_id: displayId
   };
+}
+
+function findProductById(productId) {
+  return loadProducts().find((entry) => String(entry.id) === String(productId));
+}
+
+/** Saldo mostrado no catalogo da comanda (item especial usa insumo principal ou minimo dos insumos). */
+function getProductStockDisplayQuantity(product) {
+  if (!product) return 0;
+  if (!product.isSpecial) return getProductStock(product.id);
+  const displayId = product.stockDisplayProductId;
+  if (displayId) return getProductStock(displayId);
+  const components = normalizeStockComponentIds(product);
+  if (!components.length) return 0;
+  return Math.min(...components.map((id) => getProductStock(id)));
+}
+
+function applyOrderLineStockDelta(product, delta) {
+  if (!product || !delta) return;
+  const d = Math.trunc(delta);
+  if (!d) return;
+  if (product.isSpecial) {
+    for (const componentId of normalizeStockComponentIds(product)) {
+      applyStockDeltaSilently(componentId, d);
+    }
+    return;
+  }
+  applyStockDeltaSilently(product.id, d);
 }
 
 function getProductStock(productId) {
@@ -113,7 +177,10 @@ function applyStockDeltaSilently(productId, delta) {
 function restoreOrderItemsToStock(items) {
   for (const item of items || []) {
     const qty = Math.trunc(Number(item.qty) || 0);
-    if (qty > 0 && item.productId) applyStockDeltaSilently(item.productId, qty);
+    if (qty <= 0 || !item.productId) continue;
+    const product = findProductById(item.productId);
+    if (product) applyOrderLineStockDelta(product, qty);
+    else applyStockDeltaSilently(item.productId, qty);
   }
 }
 
@@ -1112,6 +1179,10 @@ const refs = {
   productCategoryInput: document.querySelector("#productCategoryInput"),
   productPriceInput: document.querySelector("#productPriceInput"),
   productRequiresPrepInput: document.querySelector("#productRequiresPrepInput"),
+  productSpecialInput: document.querySelector("#productSpecialInput"),
+  productSpecialPanel: document.querySelector("#productSpecialPanel"),
+  productStockComponentsList: document.querySelector("#productStockComponentsList"),
+  productStockDisplaySelect: document.querySelector("#productStockDisplaySelect"),
   clearProductFormButton: document.querySelector("#clearProductFormButton"),
   productsList: document.querySelector("#productsList"),
   stockProductsList: document.querySelector("#stockProductsList"),
@@ -2191,7 +2262,7 @@ function renderProductAdmin() {
       <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm">
         <div class="flex items-start justify-between gap-2">
           <div>
-            <p class="text-sm font-bold text-primary">${product.name}</p>
+            <p class="text-sm font-bold text-primary">${product.name}${product.isSpecial ? ' <span class="text-[10px] font-bold uppercase text-secondary">Especial</span>' : ""}</p>
             <p class="text-xs text-on-surface-variant">${product.category}</p>
             <p class="mt-1 text-sm font-extrabold text-primary">${formatCurrency(product.price)}</p>
           </div>
@@ -2211,6 +2282,8 @@ function renderProductAdmin() {
   document.querySelectorAll(".product-delete-button").forEach((button) => {
     button.addEventListener("click", () => deleteProduct(button.dataset.productId));
   });
+
+  syncProductSpecialPanelVisibility();
 }
 
 function renderStockAdminCategoryFilters() {
@@ -2252,6 +2325,18 @@ function renderStockAdmin() {
 
   refs.stockProductsList.innerHTML = products
     .map((product) => {
+      if (product.isSpecial) {
+        const hint =
+          normalizeStockComponentIds(product).length > 0
+            ? "Ajuste o estoque dos insumos vinculados (lista acima)."
+            : "Configure os insumos no cadastro do produto.";
+        return `
+      <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm">
+        <p class="text-sm font-bold text-primary">${product.name} <span class="text-[10px] font-bold uppercase text-secondary">Especial</span></p>
+        <p class="text-xs text-on-surface-variant">${product.category}</p>
+        <p class="mt-2 text-xs text-on-surface-variant">${hint}</p>
+      </li>`;
+      }
       const stock = Math.trunc(Number(product.stock) || 0);
       return `
       <li class="stock-product-row rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm" data-product-id="${product.id}">
@@ -2471,7 +2556,7 @@ function renderOrderDetails() {
         <li class="rounded-xl border border-outline-variant/80 bg-surface-container-lowest/50 p-2">
           <div class="flex items-start justify-between gap-2">
             <p class="min-w-0 flex-1 text-sm font-semibold leading-snug text-on-surface">${product.name}</p>
-            ${formatProductStockHint(product.stock)}
+            ${formatProductStockHint(getProductStockDisplayQuantity(product))}
           </div>
           <p class="mt-0.5 text-xs text-on-surface-variant">${product.category} • ${formatCurrency(product.price)}</p>
           <button type="button" class="add-product-button mt-2 h-10 w-full select-none rounded-lg bg-primary text-sm font-semibold text-on-primary shadow-sm" data-product-id="${product.id}">Adicionar</button>
@@ -2973,7 +3058,7 @@ async function addItemToOrder(productId) {
       }
       order.everHadItems = true;
       order.status = deriveOrderStatus(order);
-      applyStockDeltaSilently(product.id, -1);
+      applyOrderLineStockDelta(product, -1);
       try {
         await persistPendingOrderToServer();
       } catch (_) {
@@ -3011,7 +3096,7 @@ async function addItemToOrder(productId) {
   }
   order.everHadItems = true;
   order.status = deriveOrderStatus(order);
-  applyStockDeltaSilently(product.id, -1);
+  applyOrderLineStockDelta(product, -1);
   saveOrders(orders);
   renderDashboard();
   renderOrderDetails();
@@ -3043,7 +3128,9 @@ function changeItemQty(itemIndex, delta) {
     }
   }
   if (delta !== 0 && item.productId) {
-    applyStockDeltaSilently(item.productId, -delta);
+    const catalogProduct = findProductById(item.productId);
+    if (catalogProduct) applyOrderLineStockDelta(catalogProduct, -delta);
+    else applyStockDeltaSilently(item.productId, -delta);
   }
   order.status = deriveOrderStatus(order);
 
@@ -3057,6 +3144,79 @@ function changeItemQty(itemIndex, delta) {
   saveOrders(orders);
   renderDashboard();
   renderOrderDetails();
+}
+
+function getSelectedProductStockComponentIds() {
+  if (!refs.productStockComponentsList) return [];
+  return [...refs.productStockComponentsList.querySelectorAll(".product-stock-component-checkbox:checked")].map(
+    (el) => String(el.value)
+  );
+}
+
+function refreshProductStockDisplayOptions() {
+  if (!refs.productStockDisplaySelect) return;
+  const selected = getSelectedProductStockComponentIds();
+  const current = refs.productStockDisplaySelect.value;
+  const products = loadProducts();
+  refs.productStockDisplaySelect.innerHTML =
+    '<option value="">Selecione um insumo</option>' +
+    selected
+      .map((id) => {
+        const p = products.find((entry) => String(entry.id) === id);
+        return `<option value="${id}">${p ? p.name : id}</option>`;
+      })
+      .join("");
+  if (current && selected.includes(current)) refs.productStockDisplaySelect.value = current;
+}
+
+function renderProductSpecialPanel(editingProductId) {
+  const editingId = editingProductId != null ? String(editingProductId) : String(refs.productIdInput?.value || "");
+  const product = editingId ? findProductById(editingId) : null;
+  const selectedIds = new Set(normalizeStockComponentIds(product || {}));
+
+  if (refs.productStockComponentsList) {
+    const candidates = loadProducts()
+      .filter((entry) => String(entry.id) !== editingId)
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    refs.productStockComponentsList.innerHTML = candidates.length
+      ? candidates
+          .map(
+            (entry) => `
+        <li>
+          <label class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1.5 hover:bg-surface-container-high/50">
+            <input type="checkbox" class="product-stock-component-checkbox h-4 w-4 rounded border-outline-variant text-primary" value="${entry.id}" ${selectedIds.has(String(entry.id)) ? "checked" : ""}>
+            <span class="text-sm text-on-surface">${entry.name}</span>
+            <span class="ml-auto text-[10px] tabular-nums text-on-surface-variant">${getProductStock(entry.id)} un.</span>
+          </label>
+        </li>`
+          )
+          .join("")
+      : "<li class='text-xs text-on-surface-variant'>Cadastre outros produtos para vincular insumos.</li>";
+  }
+
+  refreshProductStockDisplayOptions();
+  if (product?.stockDisplayProductId && selectedIds.has(String(product.stockDisplayProductId))) {
+    refs.productStockDisplaySelect.value = String(product.stockDisplayProductId);
+  }
+}
+
+function syncProductSpecialPanelVisibility() {
+  const on = !!refs.productSpecialInput?.checked;
+  refs.productSpecialPanel?.classList.toggle("hidden", !on);
+  if (on) renderProductSpecialPanel();
+}
+
+function readProductSpecialFromForm() {
+  const isSpecial = !!refs.productSpecialInput?.checked;
+  if (!isSpecial) {
+    return { isSpecial: false, stockComponentIds: [], stockDisplayProductId: null };
+  }
+  const stockComponentIds = getSelectedProductStockComponentIds();
+  let stockDisplayProductId = refs.productStockDisplaySelect?.value ? String(refs.productStockDisplaySelect.value) : null;
+  if (stockDisplayProductId && !stockComponentIds.includes(stockDisplayProductId)) {
+    stockDisplayProductId = stockComponentIds[0] || null;
+  }
+  return { isSpecial: true, stockComponentIds, stockDisplayProductId };
 }
 
 function fillProductForm(productId) {
@@ -3077,6 +3237,9 @@ function fillProductForm(productId) {
   refs.productCategoryInput.value = product.category;
   refs.productPriceInput.value = product.price;
   refs.productRequiresPrepInput.checked = product.requiresPrep ?? categoryRequiresPrep(product.category);
+  if (refs.productSpecialInput) refs.productSpecialInput.checked = !!product.isSpecial;
+  renderProductSpecialPanel(product.id);
+  syncProductSpecialPanelVisibility();
   refs.productSubmitButton.textContent = "Atualizar";
   refs.productNameInput.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -3084,6 +3247,8 @@ function fillProductForm(productId) {
 function clearProductForm() {
   refs.productForm.reset();
   refs.productIdInput.value = "";
+  if (refs.productSpecialInput) refs.productSpecialInput.checked = false;
+  syncProductSpecialPanelVisibility();
   refs.productSubmitButton.textContent = "Salvar";
 }
 
@@ -3577,13 +3742,21 @@ function bindEvents() {
   refs.productForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const products = loadProducts();
+    const special = readProductSpecialFromForm();
     const productData = {
       name: refs.productNameInput.value.trim(),
       category: refs.productCategoryInput.value.trim(),
       price: Number(refs.productPriceInput.value),
-      requiresPrep: refs.productRequiresPrepInput.checked
+      requiresPrep: refs.productRequiresPrepInput.checked,
+      isSpecial: special.isSpecial,
+      stockComponentIds: special.stockComponentIds,
+      stockDisplayProductId: special.stockDisplayProductId
     };
     if (!productData.name || !productData.category || Number.isNaN(productData.price)) return;
+    if (productData.isSpecial && !productData.stockComponentIds.length) {
+      alert("Item especial: marque ao menos um insumo para debitar o estoque.");
+      return;
+    }
 
     if (refs.productIdInput.value) {
       const target = products.find((product) => String(product.id) === String(refs.productIdInput.value));
@@ -3592,6 +3765,9 @@ function bindEvents() {
         target.category = productData.category;
         target.price = productData.price;
         target.requiresPrep = productData.requiresPrep;
+        target.isSpecial = productData.isSpecial;
+        target.stockComponentIds = productData.stockComponentIds;
+        target.stockDisplayProductId = productData.stockDisplayProductId;
       }
     } else {
       const newProduct = { ...productData, id: crypto.randomUUID(), stock: 0 };
@@ -3616,6 +3792,11 @@ function bindEvents() {
   });
 
   refs.clearProductFormButton.addEventListener("click", clearProductForm);
+
+  refs.productSpecialInput?.addEventListener("change", syncProductSpecialPanelVisibility);
+  refs.productStockComponentsList?.addEventListener("change", (e) => {
+    if (e.target.classList?.contains("product-stock-component-checkbox")) refreshProductStockDisplayOptions();
+  });
 
   refs.productAdminCategoryButtons?.addEventListener("click", (e) => {
     const button = e.target.closest(".product-admin-category-filter");
@@ -3857,4 +4038,187 @@ async function init() {
   }
 }
 
-init();
+if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
+  globalThis.__JANA_REGISTER_TEST_EXPORTS__({
+    normalizeSupabaseProjectUrl,
+    isSupabaseConfigured,
+    getSupabase,
+    defaultConfigPayload,
+    productRowToApp,
+    productToRow,
+    normalizeStockComponentIds,
+    findProductById,
+    getProductStockDisplayQuantity,
+    applyOrderLineStockDelta,
+    getProductStock,
+    setProductStockLocal,
+    applyStockDeltaSilently,
+    restoreOrderItemsToStock,
+    abandonPendingOrder,
+    commandaToPayload,
+    commandaPayloadDocument,
+    toIsoTimestamptz,
+    todayLocalYmdFromDate,
+    localDateFromYmd,
+    formatYmdWithWeekday,
+    formatDateTimeShort,
+    dailyCloseRowToShiftLike,
+    isDuplicateOfShift,
+    loadAllClosedSessions,
+    loadClosedShiftsFiltered,
+    shiftCloseReportSnapshot,
+    renderShiftCloseReportCard,
+    localHmFromDate,
+    shiftRowToApp,
+    loadShifts,
+    getOpenShift,
+    isLegacyAutoOpenShift,
+    shiftHasRegisterActivity,
+    shouldInferOpenShiftFromOpenOrders,
+    reconcileShiftsAfterBootstrap,
+    formatShiftLabel,
+    orderBelongsToShift,
+    ordersFinalizedInShift,
+    ordersForDashboard,
+    computeCashCloseDraft,
+    isValidYmd,
+    suggestReferenceDateForShift,
+    getCashCloseReferenceDateForUi,
+    ensureProfile,
+    bootstrapFromSupabase,
+    applySupabaseSession,
+    upsertProductRemote,
+    deleteProductRemote,
+    adjustProductStockRemote,
+    setProductStockRemote,
+    ensureProductStockRowRemote,
+    upsertCommandaRemote,
+    deleteCommandaRemote,
+    upsertAppConfigRemote,
+    insertDailyCloseRemote,
+    deleteDailyCloseRemote,
+    insertShiftRemote,
+    closeShiftRemote,
+    reopenShiftRemote,
+    openShiftManual,
+    ensureOpenShiftAuto,
+    persistShiftClose,
+    getLastClosedShift,
+    canUndoLastShiftClose,
+    undoLastShiftCloseHint,
+    rollbackLastClosedShift,
+    clearDataCache,
+    hideAuthBootScreen,
+    showAuthBootScreen,
+    formatCurrency,
+    formatProductStockHint,
+    loadProducts,
+    saveProducts,
+    loadOrders,
+    saveOrders,
+    loadClosedShiftsForHistory,
+    renderCashCloseHistoryOverlay,
+    openCashCloseHistoryDialog,
+    closeCashCloseHistoryDialog,
+    loadConfig,
+    saveConfig,
+    applyTheme,
+    updateHorizontalScrollHints,
+    scheduleHorizontalScrollHints,
+    updateSettingsTabsHints,
+    updateCategoryTabsHints,
+    updateProductAdminCategoryTabsHints,
+    updateStockAdminCategoryTabsHints,
+    refreshSettingsCategoryFilterHints,
+    isPendingLocalOrder,
+    getCurrentOrder,
+    calculateOrderSubtotal,
+    calculatePaidInDateRange,
+    finalizedOrdersInLocalDateRange,
+    aggregatePaymentMethodShares,
+    aggregateTopProducts,
+    aggregatePeakHour,
+    aggregateWeekday,
+    paymentSharesSorted,
+    categoryRequiresPrep,
+    normalizeOrderStatus,
+    getOpenOrders,
+    formatOpenOrdersCashCloseHint,
+    deriveOrderStatus,
+    formatTimeShort,
+    formatElapsedSince,
+    formatElapsedClock,
+    formatDurationFromSeconds,
+    ensureLineIds,
+    computeServiceSeconds,
+    syncOrderLineTimerElements,
+    syncOrderItemsTimerInterval,
+    markLineDelivered,
+    formatOrderIdentification,
+    formatOrderSubline,
+    todayLocalYmd,
+    localYmdFromIso,
+    orderReopenEventYmd,
+    recordOrderReopenAudit,
+    performReopenOrder,
+    openReopenConfirmDialog,
+    setReopenShiftFeedback,
+    renderReopenShiftPanel,
+    renderReopenPanel,
+    persistPendingOrderToServer,
+    persistOrderTableFromDetail,
+    createNewOrderAndOpen,
+    setLoggedUser,
+    clearLoggedUser,
+    renderAuth,
+    renderShiftBar,
+    renderDashboard,
+    renderHeaderSettingsButton,
+    renderBottomTabs,
+    renderView,
+    renderProductCategoryOptions,
+    renderSettings,
+    productCategoryFilterOptions,
+    renderProductAdminCategoryFilters,
+    renderProductAdmin,
+    renderStockAdminCategoryFilters,
+    renderStockAdmin,
+    saveStockForProductId,
+    applyStockIncrementFromRow,
+    bindStockAdminInteractionsOnce,
+    renderCategoryOptions,
+    renderOrderDetails,
+    renderCheckoutSummary,
+    renderCheckoutPaymentMethods,
+    renderReports,
+    renderAll,
+    openDetailDialog,
+    beginFinalizeFlowForOrderId,
+    findMergeTargetLineForProduct,
+    addItemToOrder,
+    changeItemQty,
+    fillProductForm,
+    clearProductForm,
+    renderProductSpecialPanel,
+    syncProductSpecialPanelVisibility,
+    readProductSpecialFromForm,
+    deleteCategory,
+    deletePaymentMethod,
+    deleteProduct,
+    bindGlobalButtonPressFeedbackOnce,
+    bindDetailCustomerViewportAssistOnce,
+    bindEvents,
+    bindIosDoubleTapBlocker,
+    bindPullToRefresh,
+    injectSupabaseClientForTests,
+    resetSupabaseClientForTests,
+    state,
+    refs,
+    PENDING_ORDER_ID,
+    THEME_PRESETS
+  });
+}
+
+if (typeof globalThis.__JANA_SKIP_INIT__ === "undefined") {
+  init();
+}

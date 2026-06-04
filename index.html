@@ -834,6 +834,26 @@
                 <input id="productRequiresPrepInput" type="checkbox"
                   class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
               </label>
+              <label
+                class="flex h-touch-target-min items-center justify-between gap-3 rounded-lg border border-outline-variant px-3">
+                <span class="text-sm font-semibold text-on-surface">Item especial (composto)</span>
+                <input id="productSpecialInput" type="checkbox"
+                  class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
+              </label>
+              <div id="productSpecialPanel" class="hidden space-y-stack-sm rounded-lg border border-outline-variant bg-surface-container-low p-3">
+                <p class="text-xs text-on-surface-variant">Ao vender este item, o estoque dos insumos marcados e debitado. O item especial em si nao precisa ter saldo proprio.</p>
+                <div>
+                  <span class="mb-1 block text-sm font-bold text-on-surface">Insumos (debitar estoque)</span>
+                  <ul id="productStockComponentsList" class="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-outline-variant/60 bg-surface-container-lowest p-2"></ul>
+                </div>
+                <label class="block">
+                  <span class="mb-1 block text-sm font-bold text-on-surface">Estoque exibido na comanda</span>
+                  <select id="productStockDisplaySelect"
+                    class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-4 text-sm">
+                    <option value="">Selecione um insumo</option>
+                  </select>
+                </label>
+              </div>
               <div class="flex gap-stack-sm">
                 <button id="productSubmitButton" type="submit"
                   class="h-touch-target-min flex-1 rounded-lg bg-primary text-sm font-bold text-on-primary">Salvar</button>
