@@ -3026,39 +3026,6 @@ function renderOrderDetails() {
     refs.orderSubtotalLabel.textContent = `Subtotal: ${formatCurrency(calculateOrderSubtotal(order))}`;
   }
 
-  if (isLocked) {
-    syncOrderLineTimerElements();
-    syncOrderItemsTimerInterval();
-    return;
-  }
-
-  document.querySelectorAll(".add-product-button").forEach((button) => {
-    if (button.dataset.bound === "1") return;
-    button.dataset.bound = "1";
-    const fire = () => {
-      const productId = String(button.dataset.productId || "");
-      void addItemToOrder(productId);
-    };
-    button.addEventListener("click", fire);
-  });
-
-  document.querySelectorAll(".qty-plus").forEach((button) => {
-    button.addEventListener("click", () =>
-      changeItemQty(Number(button.dataset.index), 1),
-    );
-  });
-  document.querySelectorAll(".qty-minus").forEach((button) => {
-    button.addEventListener("click", () =>
-      changeItemQty(Number(button.dataset.index), -1),
-    );
-  });
-
-  document.querySelectorAll(".mark-delivered-button").forEach((button) => {
-    button.addEventListener("click", () =>
-      markLineDelivered(button.dataset.lineId),
-    );
-  });
-
   syncOrderLineTimerElements();
   syncOrderItemsTimerInterval();
 }
@@ -3825,6 +3792,74 @@ function bindDetailCustomerViewportAssistOnce() {
   // Intencionalmente sem ajuste: deixa o navegador/sistema lidar com teclado virtual.
 }
 
+/** Toque no catalogo da comanda: pointerup (nao depende do click sintetico do iOS). */
+function bindOrderDetailInteractionsOnce() {
+  const list = refs.availableProductsList;
+  if (!list || list.dataset.orderDetailBound === "1") return;
+  list.dataset.orderDetailBound = "1";
+
+  const TAP_MOVE_PX = 24;
+  let pickerTap = null;
+
+  list.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 0) return;
+      const btn = e.target.closest(".add-product-button");
+      if (!btn || btn.disabled) return;
+      pickerTap = {
+        pointerId: e.pointerId,
+        productId: String(btn.dataset.productId || ""),
+        x: e.clientX,
+        y: e.clientY,
+      };
+    },
+    true,
+  );
+
+  const clearPickerTap = (e) => {
+    if (!pickerTap || e.pointerId !== pickerTap.pointerId) return;
+    pickerTap = null;
+  };
+  list.addEventListener("pointercancel", clearPickerTap, true);
+
+  list.addEventListener(
+    "pointerup",
+    (e) => {
+      if (e.button !== 0 || !pickerTap || e.pointerId !== pickerTap.pointerId)
+        return;
+      const btn = e.target.closest(".add-product-button");
+      const { productId, x, y } = pickerTap;
+      pickerTap = null;
+      if (!btn || String(btn.dataset.productId || "") !== productId) return;
+      const dx = e.clientX - x;
+      const dy = e.clientY - y;
+      if (dx * dx + dy * dy > TAP_MOVE_PX * TAP_MOVE_PX) return;
+      void addItemToOrder(productId);
+    },
+    true,
+  );
+
+  const itemsList = refs.orderItemsList;
+  if (itemsList && itemsList.dataset.orderItemsDelegate !== "1") {
+    itemsList.dataset.orderItemsDelegate = "1";
+    itemsList.addEventListener("click", (e) => {
+      const plus = e.target.closest(".qty-plus");
+      if (plus) {
+        changeItemQty(Number(plus.dataset.index), 1);
+        return;
+      }
+      const minus = e.target.closest(".qty-minus");
+      if (minus) {
+        changeItemQty(Number(minus.dataset.index), -1);
+        return;
+      }
+      const delivered = e.target.closest(".mark-delivered-button");
+      if (delivered) markLineDelivered(delivered.dataset.lineId);
+    });
+  }
+}
+
 function bindEvents() {
   bindDetailCustomerViewportAssistOnce();
   refs.loginForm.addEventListener("submit", async (event) => {
@@ -4503,6 +4538,7 @@ function bindEvents() {
     }
   });
 
+  bindOrderDetailInteractionsOnce();
   bindGlobalButtonPressFeedbackOnce();
   bindStockAdminInteractionsOnce();
 }
@@ -4510,9 +4546,12 @@ function bindEvents() {
 /** iOS Safari ainda dispara double-tap zoom mesmo com viewport maximum-scale=1. Bloqueia. */
 function bindIosDoubleTapBlocker() {
   let lastTouchEnd = 0;
+  const interactiveSelector =
+    "button, a, input, select, textarea, label, [role='button'], [contenteditable='true']";
   document.addEventListener(
     "touchend",
     (e) => {
+      if (e.target.closest(interactiveSelector)) return;
       const now = Date.now();
       if (now - lastTouchEnd < 350) e.preventDefault();
       lastTouchEnd = now;
