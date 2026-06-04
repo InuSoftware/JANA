@@ -4613,32 +4613,41 @@ function bindPullToRefresh(scroller) {
 const MOBILE_FIELD_SELECTOR =
   "input:not([type='hidden']):not([type='checkbox']):not([type='radio']), select, textarea";
 
-/** Campos com teclado numerico: type=number no mobile costuma baguncar viewport/scroll. */
-function isNumericKeyboardField(el) {
-  if (!(el instanceof HTMLInputElement)) return false;
-  if (el.type === "number") return true;
-  const mode = el.getAttribute("inputmode");
-  return mode === "numeric" || mode === "decimal";
-}
+const FIELD_SCROLL_MARGIN = 8;
+const KEYBOARD_INSET_MIN = 72;
+const KEYBOARD_ESTIMATE_CAP_PX = 320;
 
-function scheduleNumericFieldScroll(el) {
-  scrollFocusedFieldIntoView(el);
-  requestAnimationFrame(() => scrollFocusedFieldIntoView(el));
-  [120, 320, 600].forEach((ms) => {
-    setTimeout(() => {
-      if (document.activeElement === el) scrollFocusedFieldIntoView(el);
-    }, ms);
-  });
-}
-
-function getVisibleViewportTop() {
-  return window.visualViewport?.offsetTop ?? 0;
-}
-
-function getVisibleViewportBottom() {
+function keyboardInsetPx() {
   const vv = window.visualViewport;
-  if (!vv) return window.innerHeight;
-  return vv.offsetTop + vv.height;
+  if (!vv) return 0;
+  return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+}
+
+/** Faixa visivel na tela (intersecao com viewport + barra fixa, sem padding extra no layout). */
+function getFieldVisibleBand() {
+  const vv = window.visualViewport;
+  const m = FIELD_SCROLL_MARGIN;
+  let top = (vv?.offsetTop ?? 0) + m;
+  let bottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - m;
+
+  const nav = refs.appBottomNav;
+  if (nav && !nav.classList.contains("hidden")) {
+    const navTop = nav.getBoundingClientRect().top;
+    if (navTop > top && navTop < bottom) bottom = navTop - m;
+  }
+
+  return { top, bottom };
+}
+
+function scheduleFieldScrollIntoView(el) {
+  const run = (allowEstimate) => {
+    if (document.activeElement === el) scrollFocusedFieldIntoView(el, allowEstimate);
+  };
+  run(false);
+  requestAnimationFrame(() => run(false));
+  [120, 280, 480, 720].forEach((ms) => {
+    setTimeout(() => run(ms >= 280), ms);
+  });
 }
 
 function findInputScrollRoot(el) {
@@ -4664,25 +4673,52 @@ function findInputScrollRoot(el) {
   return refs.mainContent || refs.loginScreen || null;
 }
 
-function scrollFocusedFieldIntoView(el) {
+function scrollFocusedFieldIntoView(el, allowKeyboardEstimate = false) {
   if (!el?.getBoundingClientRect) return;
-  const margin = 16;
-  const topBound = getVisibleViewportTop() + margin;
-  const bottomBound = getVisibleViewportBottom() - margin;
-  const rect = el.getBoundingClientRect();
-  if (rect.top >= topBound && rect.bottom <= bottomBound) return;
 
   const root = findInputScrollRoot(el);
-  if (!root) {
-    if (!isNumericKeyboardField(el)) {
-      el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (!root) return;
+
+  const applyScroll = (band) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.top >= band.top && rect.bottom <= band.bottom) return false;
+
+    let moved = false;
+    if (rect.bottom > band.bottom) {
+      root.scrollTop += rect.bottom - band.bottom;
+      moved = true;
     }
+    if (rect.top < band.top) {
+      root.scrollTop -= band.top - rect.top;
+      moved = true;
+    }
+    return moved;
+  };
+
+  const band = getFieldVisibleBand();
+  applyScroll(band);
+
+  if (!allowKeyboardEstimate) return;
+
+  const inset = keyboardInsetPx();
+  if (inset >= KEYBOARD_INSET_MIN) return;
+
+  const rectAfter = el.getBoundingClientRect();
+  const bandAfter = getFieldVisibleBand();
+  if (
+    rectAfter.top >= bandAfter.top &&
+    rectAfter.bottom <= bandAfter.bottom
+  ) {
     return;
   }
-  if (rect.bottom > bottomBound) {
-    root.scrollTop += rect.bottom - bottomBound;
-  } else if (rect.top < topBound) {
-    root.scrollTop -= topBound - rect.top;
+
+  const estimate = Math.min(
+    KEYBOARD_ESTIMATE_CAP_PX,
+    Math.round(window.innerHeight * 0.4),
+  );
+  const estBottom = window.innerHeight - estimate - FIELD_SCROLL_MARGIN;
+  if (rectAfter.bottom > estBottom) {
+    root.scrollTop += rectAfter.bottom - estBottom;
   }
 }
 
@@ -4690,11 +4726,7 @@ function bindMobileKeyboardScroll() {
   const refocusVisibleField = () => {
     const el = document.activeElement;
     if (!(el instanceof HTMLElement) || !el.matches(MOBILE_FIELD_SELECTOR)) return;
-    if (isNumericKeyboardField(el)) {
-      scheduleNumericFieldScroll(el);
-      return;
-    }
-    scrollFocusedFieldIntoView(el);
+    scrollFocusedFieldIntoView(el, true);
   };
 
   document.addEventListener(
@@ -4702,12 +4734,7 @@ function bindMobileKeyboardScroll() {
     (e) => {
       const t = e.target;
       if (!(t instanceof HTMLElement) || !t.matches(MOBILE_FIELD_SELECTOR)) return;
-      if (isNumericKeyboardField(t)) {
-        scheduleNumericFieldScroll(t);
-        return;
-      }
-      requestAnimationFrame(() => scrollFocusedFieldIntoView(t));
-      setTimeout(() => scrollFocusedFieldIntoView(t), 320);
+      scheduleFieldScrollIntoView(t);
     },
     true,
   );
