@@ -62,11 +62,16 @@ function resetSupabaseClientForTests() {
   supabaseClient = null;
 }
 
+function isStockControlEnabled() {
+  return state.config.useStock !== false;
+}
+
 function defaultConfigPayload() {
   return {
     id: 1,
     useTables: false,
     useServiceFee: true,
+    useStock: true,
     activeTheme: "blue-service",
     categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
     prepCategories: [],
@@ -143,7 +148,7 @@ function getProductStockDisplayQuantity(product) {
 }
 
 function applyOrderLineStockDelta(product, delta) {
-  if (!product || !delta) return;
+  if (!isStockControlEnabled() || !product || !delta) return;
   const d = Math.trunc(delta);
   if (!d) return;
   if (product.isSpecial) {
@@ -167,7 +172,7 @@ function setProductStockLocal(productId, quantity) {
 
 /** Debito/credito silencioso na venda ou cancelamento de item (nao bloqueia fluxo). */
 function applyStockDeltaSilently(productId, delta) {
-  if (!productId || !delta) return;
+  if (!isStockControlEnabled() || !productId || !delta) return;
   const d = Math.trunc(delta);
   if (!d) return;
   setProductStockLocal(productId, getProductStock(productId) + d);
@@ -826,6 +831,7 @@ async function setProductStockRemote(productId, quantity) {
 }
 
 async function ensureProductStockRowRemote(productId) {
+  if (!isStockControlEnabled()) return;
   try {
     await setProductStockRemote(productId, getProductStock(productId));
   } catch (e) {
@@ -1066,6 +1072,7 @@ const state = {
     id: 1,
     useTables: false,
     useServiceFee: true,
+    useStock: true,
     activeTheme: "blue-service",
     categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
     prepCategories: [],
@@ -1083,6 +1090,7 @@ const state = {
       id: 1,
       useTables: false,
       useServiceFee: true,
+      useStock: true,
       activeTheme: "blue-service",
       categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
       prepCategories: [],
@@ -1196,6 +1204,9 @@ const refs = {
   productAdminCategoryTabsRightHint: document.querySelector("#productAdminCategoryTabsRightHint"),
   tableModeToggle: document.querySelector("#tableModeToggle"),
   serviceFeeToggle: document.querySelector("#serviceFeeToggle"),
+  stockModeToggle: document.querySelector("#stockModeToggle"),
+  productStockFeaturesWrap: document.querySelector("#productStockFeaturesWrap"),
+  settingsTabInventoryButton: document.querySelector('[data-settings-tab="inventory"]'),
   orderTableGroup: document.querySelector("#orderTableGroup"),
   categoryForm: document.querySelector("#categoryForm"),
   categoryNameInput: document.querySelector("#categoryNameInput"),
@@ -1266,6 +1277,11 @@ function formatCurrency(value) {
 function formatProductStockHint(stock) {
   const n = Math.trunc(Number(stock) || 0);
   return `<span class="product-stock-hint shrink-0 text-[10px] font-medium tabular-nums text-on-surface-variant/70" title="Estoque atual">${n} un.</span>`;
+}
+
+function formatProductStockHintForCatalog(product) {
+  if (!isStockControlEnabled()) return "";
+  return formatProductStockHint(getProductStockDisplayQuantity(product));
 }
 
 function loadProducts() {
@@ -1376,6 +1392,7 @@ function loadConfig() {
     id: 1,
     useTables: false,
     useServiceFee: true,
+    useStock: true,
     activeTheme: "blue-service",
     categories: ["Bebidas", "Lanches", "Porcoes", "Pratos", "Sobremesas", "Outros"],
     prepCategories: [],
@@ -2135,7 +2152,13 @@ function renderSettings() {
 
   refs.tableModeToggle.checked = !!state.config.useTables;
   refs.serviceFeeToggle.checked = !!state.config.useServiceFee;
+  refs.stockModeToggle.checked = isStockControlEnabled();
   refs.serviceFeeField?.classList.toggle("hidden", !state.config.useServiceFee);
+  refs.settingsTabInventoryButton?.classList.toggle("hidden", !isStockControlEnabled());
+  refs.productStockFeaturesWrap?.classList.toggle("hidden", !isStockControlEnabled());
+  if (!isStockControlEnabled() && state.selectedSettingsTab === "inventory") {
+    state.selectedSettingsTab = "operation";
+  }
   renderProductCategoryOptions();
 
   refs.categoriesList.innerHTML = (state.config.categories || [])
@@ -2364,6 +2387,7 @@ function renderStockAdmin() {
 }
 
 async function saveStockForProductId(productId, quantity) {
+  if (!isStockControlEnabled()) return false;
   const qty = Math.trunc(Number(quantity));
   if (Number.isNaN(qty)) return false;
   setProductStockLocal(productId, qty);
@@ -2377,6 +2401,7 @@ async function saveStockForProductId(productId, quantity) {
 }
 
 async function applyStockIncrementFromRow(rowEl) {
+  if (!isStockControlEnabled()) return false;
   const productId = rowEl?.dataset?.productId;
   if (!productId) return false;
   const addInput = rowEl.querySelector(".stock-add-input");
@@ -2556,7 +2581,7 @@ function renderOrderDetails() {
         <li class="rounded-xl border border-outline-variant/80 bg-surface-container-lowest/50 p-2">
           <div class="flex items-start justify-between gap-2">
             <p class="min-w-0 flex-1 text-sm font-semibold leading-snug text-on-surface">${product.name}</p>
-            ${formatProductStockHint(getProductStockDisplayQuantity(product))}
+            ${formatProductStockHintForCatalog(product)}
           </div>
           <p class="mt-0.5 text-xs text-on-surface-variant">${product.category} • ${formatCurrency(product.price)}</p>
           <button type="button" class="add-product-button mt-2 h-10 w-full select-none rounded-lg bg-primary text-sm font-semibold text-on-primary shadow-sm" data-product-id="${product.id}">Adicionar</button>
@@ -3753,9 +3778,14 @@ function bindEvents() {
       stockDisplayProductId: special.stockDisplayProductId
     };
     if (!productData.name || !productData.category || Number.isNaN(productData.price)) return;
-    if (productData.isSpecial && !productData.stockComponentIds.length) {
+    if (isStockControlEnabled() && productData.isSpecial && !productData.stockComponentIds.length) {
       alert("Item especial: marque ao menos um insumo para debitar o estoque.");
       return;
+    }
+    if (!isStockControlEnabled()) {
+      productData.isSpecial = false;
+      productData.stockComponentIds = [];
+      productData.stockDisplayProductId = null;
     }
 
     if (refs.productIdInput.value) {
@@ -3820,6 +3850,12 @@ function bindEvents() {
 
   refs.serviceFeeToggle.addEventListener("change", () => {
     state.config.useServiceFee = refs.serviceFeeToggle.checked;
+    saveConfig(state.config);
+    renderAll();
+  });
+
+  refs.stockModeToggle?.addEventListener("change", () => {
+    state.config.useStock = refs.stockModeToggle.checked;
     saveConfig(state.config);
     renderAll();
   });
@@ -4044,6 +4080,8 @@ if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
     isSupabaseConfigured,
     getSupabase,
     defaultConfigPayload,
+    isStockControlEnabled,
+    formatProductStockHintForCatalog,
     productRowToApp,
     productToRow,
     normalizeStockComponentIds,

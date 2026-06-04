@@ -834,6 +834,7 @@
                 <input id="productRequiresPrepInput" type="checkbox"
                   class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
               </label>
+              <div id="productStockFeaturesWrap" class="space-y-stack-sm">
               <label
                 class="flex h-touch-target-min items-center justify-between gap-3 rounded-lg border border-outline-variant px-3">
                 <span class="text-sm font-semibold text-on-surface">Item especial (composto)</span>
@@ -853,6 +854,7 @@
                     <option value="">Selecione um insumo</option>
                   </select>
                 </label>
+              </div>
               </div>
               <div class="flex gap-stack-sm">
                 <button id="productSubmitButton" type="submit"
@@ -918,6 +920,13 @@
               <input id="serviceFeeToggle" type="checkbox"
                 class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
             </label>
+            <label
+              class="mt-2 flex h-touch-target-min items-center justify-between gap-3 rounded-lg border border-outline-variant px-3">
+              <span class="text-sm font-semibold text-on-surface">Controlar estoque</span>
+              <input id="stockModeToggle" type="checkbox"
+                class="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary">
+            </label>
+            <p class="mt-2 text-xs text-on-surface-variant">Com estoque desligado, vendas nao debitam saldo, a aba Estoque some e itens especiais ficam ocultos no cadastro.</p>
             <p class="mt-2 text-xs text-on-surface-variant">O caixa abre e fecha quando voce decidir (botao no Inicio e
               fechamento em Relatorios). Nao ha horario fixo.</p>
           </div>

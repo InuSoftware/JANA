@@ -96,6 +96,7 @@ exports[`snapshots: configuração padrão do app > defaultConfigPayload mantém
   ],
   "prepCategories": [],
   "useServiceFee": true,
+  "useStock": true,
   "useTables": false,
 }
 `;

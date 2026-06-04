@@ -74,6 +74,7 @@ describe("defaultConfigPayload", () => {
     expect(cfg.id).toBe(1);
     expect(cfg.useTables).toBe(false);
     expect(cfg.useServiceFee).toBe(true);
+    expect(cfg.useStock).toBe(true);
     expect(cfg.activeTheme).toBe("blue-service");
     expect(cfg.categories.length).toBeGreaterThan(0);
     expect(cfg.paymentMethods.length).toBe(4);

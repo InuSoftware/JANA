@@ -73,6 +73,15 @@ describe("itens especiais (compostos)", () => {
     expect(j.getProductStock(PAO.id)).toBe(5);
   });
 
+  it("com useStock desligado nao debita insumos (toggle de operacao)", async () => {
+    j.state.config.useStock = false;
+    seedOrders(j, [makeOrder({ id: "o1", items: [] })]);
+    j.state.selectedOrderId = "o1";
+    await j.addItemToOrder(CACHORRO.id);
+    expect(j.getProductStock(CHURRASCO.id)).toBe(10);
+    expect(j.getProductStock(PAO.id)).toBe(5);
+  });
+
   it("produto normal continua debitando apenas a si", async () => {
     seedProducts(j, [CHURRASCO, PAO, CACHORRO, PRODUCT_A, PRODUCT_B]);
     seedOrders(j, [makeOrder({ id: "o1", items: [] })]);
