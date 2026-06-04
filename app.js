@@ -2352,10 +2352,23 @@ function renderStockAdmin() {
           normalizeStockComponentIds(product).length > 0
             ? "Ajuste o estoque dos insumos vinculados (lista acima)."
             : "Configure os insumos no cadastro do produto.";
+        const displayQty = getProductStockDisplayQuantity(product);
+        const displayProduct = product.stockDisplayProductId
+          ? findProductById(product.stockDisplayProductId)
+          : null;
+        const displayNote = displayProduct
+          ? ` (insumo: ${displayProduct.name})`
+          : normalizeStockComponentIds(product).length > 0
+            ? " (menor saldo entre os insumos)"
+            : "";
         return `
       <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm">
-        <p class="text-sm font-bold text-primary">${product.name} <span class="text-[10px] font-bold uppercase text-secondary">Especial</span></p>
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-sm font-bold text-primary">${product.name} <span class="text-[10px] font-bold uppercase text-secondary">Especial</span></p>
+          ${formatProductStockHint(displayQty)}
+        </div>
         <p class="text-xs text-on-surface-variant">${product.category}</p>
+        <p class="mt-1 text-[11px] text-on-surface-variant">Possivel montar${displayNote}</p>
         <p class="mt-2 text-xs text-on-surface-variant">${hint}</p>
       </li>`;
       }
