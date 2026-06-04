@@ -4615,7 +4615,26 @@ const MOBILE_FIELD_SELECTOR =
 
 const FIELD_SCROLL_MARGIN = 8;
 const KEYBOARD_INSET_MIN = 72;
-const KEYBOARD_ESTIMATE_CAP_PX = 320;
+
+function isLikelyIos() {
+  return (
+    /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+/** Android costuma demorar mais para atualizar visualViewport; iOS anima o teclado mais devagar. */
+function fieldScrollRetryDelaysMs() {
+  return isLikelyIos()
+    ? [120, 320, 520, 820]
+    : [120, 280, 480, 720, 920];
+}
+
+function keyboardEstimatePx() {
+  const cap = isLikelyIos() ? 280 : 320;
+  const ratio = isLikelyIos() ? 0.36 : 0.4;
+  return Math.min(cap, Math.round(window.innerHeight * ratio));
+}
 
 function keyboardInsetPx() {
   const vv = window.visualViewport;
@@ -4645,7 +4664,7 @@ function scheduleFieldScrollIntoView(el) {
   };
   run(false);
   requestAnimationFrame(() => run(false));
-  [120, 280, 480, 720].forEach((ms) => {
+  fieldScrollRetryDelaysMs().forEach((ms) => {
     setTimeout(() => run(ms >= 280), ms);
   });
 }
@@ -4712,10 +4731,7 @@ function scrollFocusedFieldIntoView(el, allowKeyboardEstimate = false) {
     return;
   }
 
-  const estimate = Math.min(
-    KEYBOARD_ESTIMATE_CAP_PX,
-    Math.round(window.innerHeight * 0.4),
-  );
+  const estimate = keyboardEstimatePx();
   const estBottom = window.innerHeight - estimate - FIELD_SCROLL_MARGIN;
   if (rectAfter.bottom > estBottom) {
     root.scrollTop += rectAfter.bottom - estBottom;
@@ -4723,10 +4739,14 @@ function scrollFocusedFieldIntoView(el, allowKeyboardEstimate = false) {
 }
 
 function bindMobileKeyboardScroll() {
+  let viewportScrollTimer = 0;
   const refocusVisibleField = () => {
-    const el = document.activeElement;
-    if (!(el instanceof HTMLElement) || !el.matches(MOBILE_FIELD_SELECTOR)) return;
-    scrollFocusedFieldIntoView(el, true);
+    clearTimeout(viewportScrollTimer);
+    viewportScrollTimer = window.setTimeout(() => {
+      const el = document.activeElement;
+      if (!(el instanceof HTMLElement) || !el.matches(MOBILE_FIELD_SELECTOR)) return;
+      scrollFocusedFieldIntoView(el, true);
+    }, 48);
   };
 
   document.addEventListener(
