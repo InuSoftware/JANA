@@ -302,8 +302,9 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
-      /* Espaco da barra fixa no rodape (52px + py + area segura). */
-      padding-bottom: var(--app-nav-block);
+      /* Barra de abas fica no flex abaixo — so folga leve no fim da rolagem. */
+      padding-bottom: 0.5rem;
+      scroll-padding-bottom: 0.75rem;
     }
 
     .app-viewport-fill {
@@ -346,22 +347,50 @@
       overscroll-behavior-y: contain;
     }
 
-    /* Footer fixo no fundo da tela (evita folga abaixo em Android / iOS variados). */
+    /* Rodape no fluxo do shell (nao fixed): nao cobre Confirmar; encosta no fundo no iOS/PWA. */
     .app-shell-nav {
-      position: fixed;
-      bottom: 0;
-      left: 50%;
-      z-index: 40;
+      flex: 0 0 auto;
       width: 100%;
-      max-width: 390px;
       box-sizing: border-box;
-      transform: translateX(-50%);
       padding-bottom: env(safe-area-inset-bottom, 0px);
       background-color: var(--bg-surface);
     }
 
+    .app-shell-nav__row {
+      display: flex;
+      height: 3.25rem;
+      align-items: stretch;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      box-sizing: border-box;
+    }
+
+    /* Ultimo CTA nas abas (ex. Confirmar em Config) — espaco extra ao rolar ate o fim. */
+    .main-bottom-action {
+      scroll-margin-bottom: 0.75rem;
+    }
+
+    /* Atalho na tela inicial (iOS): altura minima da tela + safe-area no rodape. */
+    @supports (-webkit-touch-callout: none) {
+      html,
+      body {
+        min-height: 100dvh;
+      }
+    }
+
+    html.is-standalone .app-shell-nav {
+      padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+    }
+
+    @media (display-mode: standalone) {
+      .app-shell-nav {
+        padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+      }
+    }
+
     :root {
       --app-height: 100dvh;
+      --app-nav-row: 3.25rem;
       --app-nav-block: calc(3.75rem + env(safe-area-inset-bottom, 0px));
       --bg-background: #fbf9fc;
       --bg-surface: #fbf9fc;
@@ -681,6 +710,13 @@
         return vv.height < window.innerHeight * 0.72;
       }
 
+      function isLikelyIos() {
+        return (
+          /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+        );
+      }
+
       function setAppHeight() {
         var h = isKeyboardOpen()
           ? window.innerHeight
@@ -688,7 +724,15 @@
               window.innerHeight,
               document.documentElement.clientHeight || 0,
             );
+        var vv = window.visualViewport;
+        if (!isKeyboardOpen() && isLikelyIos() && vv) {
+          h = Math.max(h, Math.round(vv.height + (vv.offsetTop || 0)));
+        }
         document.documentElement.style.setProperty("--app-height", h + "px");
+        var standalone =
+          window.navigator.standalone === true ||
+          window.matchMedia("(display-mode: standalone)").matches;
+        document.documentElement.classList.toggle("is-standalone", standalone);
       }
 
       setAppHeight();
@@ -1078,12 +1122,12 @@
             <div id="themePresetList" class="mt-2 grid grid-cols-2 gap-2"></div>
           </div>
           <button id="confirmSettingsButton"
-            class="mt-3 h-touch-target-min w-full rounded-xl bg-primary text-base font-bold text-on-primary shadow-sm transition">Confirmar</button>
+            class="main-bottom-action mt-3 h-touch-target-min w-full rounded-xl bg-primary text-base font-bold text-on-primary shadow-sm transition">Confirmar</button>
         </section>
       </div>
 
       <nav id="appBottomNav" class="app-shell-nav z-40 w-full border-t border-outline-variant bg-surface">
-        <div class="flex h-[52px] items-stretch gap-1 px-2 py-1">
+        <div class="app-shell-nav__row">
           <button type="button" id="homeButton" data-tab="dashboardTab"
             class="bottom-tab bottom-tab--active flex flex-1 items-center justify-center rounded-[0.875rem] bg-primary-container text-on-primary-container transition"
             title="Início" aria-label="Início" aria-selected="true">
