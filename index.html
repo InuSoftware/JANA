@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -181,11 +181,19 @@
       color: var(--text-on-primary-container);
     }
 
-    html,
-    body {
-      height: 100%;
+    html {
+      height: var(--app-height);
       overflow: hidden;
       overscroll-behavior: none;
+    }
+
+    body {
+      height: var(--app-height);
+      min-height: var(--app-height);
+      max-height: var(--app-height);
+      overflow: hidden;
+      overscroll-behavior: none;
+      background-color: var(--bg-background);
     }
 
     body {
@@ -204,10 +212,40 @@
       font-size: 16px !important;
     }
 
+    /* Campo editavel padrao (altura toque, borda, foco). */
+    .app-field {
+      box-sizing: border-box;
+      min-height: 48px;
+      width: 100%;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border-outline-variant);
+      background-color: var(--bg-surface-low);
+      padding-left: 1rem;
+      padding-right: 1rem;
+      color: var(--text-on-surface);
+    }
+
+    .app-field:focus,
     .app-input:focus {
       outline: none;
       border-color: transparent !important;
       box-shadow: 0 0 0 2px var(--bg-primary) !important;
+    }
+
+    /* type=number no mobile costuma empurrar o layout; usamos text + inputmode. */
+    .app-field[inputmode="numeric"],
+    .app-field[inputmode="decimal"] {
+      touch-action: manipulation;
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+
+    .app-field[inputmode="numeric"]::-webkit-outer-spin-button,
+    .app-field[inputmode="numeric"]::-webkit-inner-spin-button,
+    .app-field[inputmode="decimal"]::-webkit-outer-spin-button,
+    .app-field[inputmode="decimal"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
     }
 
     input:-webkit-autofill,
@@ -236,9 +274,9 @@
 
     /* App shell: o shell em si nao rola; somente #mainContent rola por dentro. */
     .app-shell {
-      height: var(--app-height);
-      min-height: var(--app-height);
-      max-height: var(--app-height);
+      height: 100%;
+      min-height: 100%;
+      max-height: 100%;
       display: flex;
       flex-direction: column;
       padding-top: env(safe-area-inset-top);
@@ -257,25 +295,67 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
+      /* Espaco da barra fixa no rodape (52px + py + area segura). */
+      padding-bottom: var(--app-nav-block);
     }
 
     .app-viewport-fill {
-      height: var(--app-height);
-      min-height: var(--app-height);
-      max-height: var(--app-height);
+      height: 100%;
+      min-height: 100%;
+      max-height: 100%;
     }
 
     .login-viewport-min {
-      min-height: var(--app-height);
+      height: 100%;
+      min-height: 100%;
+      max-height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
     }
 
+    /* Telas cheias (comanda, fechamento): altura fixa do layout, scroll interno. */
+    .app-overlay {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      z-index: 50;
+      display: flex;
+      width: 100%;
+      max-width: 390px;
+      height: var(--app-height);
+      max-height: var(--app-height);
+      flex-direction: column;
+      overflow: hidden;
+      background-color: var(--bg-background);
+      transform: translateX(-50%);
+    }
+
+    .app-overlay-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+    }
+
+    /* Footer fixo no fundo da tela (evita folga abaixo em Android / iOS variados). */
     .app-shell-nav {
-      flex: 0 0 auto;
-      padding-bottom: env(safe-area-inset-bottom);
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      z-index: 40;
+      width: 100%;
+      max-width: 390px;
+      box-sizing: border-box;
+      transform: translateX(-50%);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background-color: var(--bg-surface);
     }
 
     :root {
       --app-height: 100dvh;
+      --app-nav-block: calc(3.75rem + env(safe-area-inset-bottom, 0px));
       --bg-background: #fbf9fc;
       --bg-surface: #fbf9fc;
       --bg-surface-lowest: #ffffff;
@@ -587,22 +667,31 @@
   </style>
   <script>
     (function () {
+      /* Altura do layout = area visivel; teclado nao encolhe o shell (rolagem no app.js). */
+      function isKeyboardOpen() {
+        var vv = window.visualViewport;
+        if (!vv) return false;
+        return vv.height < window.innerHeight * 0.72;
+      }
+
       function setAppHeight() {
-        var h =
-          window.visualViewport && window.visualViewport.height > 0
-            ? window.visualViewport.height
-            : window.innerHeight;
+        var h = isKeyboardOpen()
+          ? window.innerHeight
+          : Math.max(
+              window.innerHeight,
+              document.documentElement.clientHeight || 0,
+            );
         document.documentElement.style.setProperty("--app-height", h + "px");
       }
+
       setAppHeight();
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", setAppHeight);
-        window.visualViewport.addEventListener("scroll", setAppHeight);
-      }
       window.addEventListener("resize", setAppHeight);
       window.addEventListener("orientationchange", function () {
         setTimeout(setAppHeight, 300);
       });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", setAppHeight);
+      }
     })();
   </script>
 </head>
@@ -615,7 +704,7 @@
   <script src="./supabase-config.js"></script>
   <main class="app-viewport-fill mx-auto w-full max-w-[390px] bg-surface shadow-lg">
     <section id="loginScreen"
-      class="login-viewport-min flex flex-col justify-center overflow-y-auto px-margin-mobile py-stack-md">
+      class="login-viewport-min flex flex-col justify-center px-margin-mobile py-stack-md">
       <div class="mb-stack-md flex flex-col items-center gap-stack-sm text-center">
         <div
           class="mb-stack-sm flex h-[7.5rem] w-[7.5rem] shrink-0 items-center justify-center rounded-2xl border border-outline-variant bg-primary-fixed shadow-sm"
@@ -634,7 +723,7 @@
               <span
                 class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary">person</span>
               <input id="usernameInput" type="email" autocomplete="email"
-                class="app-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-base text-on-surface"
+                class="app-field app-input pl-12 pr-4 text-base"
                 placeholder="seu@email.com">
             </div>
           </label>
@@ -644,7 +733,7 @@
               <span
                 class="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary">lock</span>
               <input id="passwordInput" type="password"
-                class="app-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-base text-on-surface"
+                class="app-field app-input pl-12 pr-4 text-base"
                 placeholder="Digite sua senha">
             </div>
           </label>
@@ -733,13 +822,11 @@
             <div class="flex flex-wrap gap-2">
               <label class="flex min-w-[140px] flex-1 flex-col gap-1 text-xs font-semibold text-on-surface-variant">
                 De
-                <input id="reportsDateFromInput" type="date"
-                  class="h-touch-target-min rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm text-on-surface">
+                <input id="reportsDateFromInput" type="date" class="app-field text-sm">
               </label>
               <label class="flex min-w-[140px] flex-1 flex-col gap-1 text-xs font-semibold text-on-surface-variant">
                 Ate
-                <input id="reportsDateToInput" type="date"
-                  class="h-touch-target-min rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm text-on-surface">
+                <input id="reportsDateToInput" type="date" class="app-field text-sm">
               </label>
             </div>
           </div>
@@ -810,23 +897,18 @@
               <input id="productIdInput" type="hidden">
               <label class="block">
                 <span class="mb-1 block text-sm font-bold text-on-surface">Nome</span>
-                <input id="productNameInput" type="text"
-                  class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-4"
-                  required>
+                <input id="productNameInput" type="text" class="app-field" required>
               </label>
               <label class="block">
                 <span class="mb-1 block text-sm font-bold text-on-surface">Categoria</span>
-                <select id="productCategoryInput"
-                  class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-4"
-                  required>
+                <select id="productCategoryInput" class="app-field" required>
                   <option value="">Selecione uma categoria</option>
                 </select>
               </label>
               <label class="block">
                 <span class="mb-1 block text-sm font-bold text-on-surface">Preco</span>
-                <input id="productPriceInput" type="number" min="0" step="0.01"
-                  class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-4"
-                  required>
+                <input id="productPriceInput" type="text" inputmode="decimal" autocomplete="off"
+                  class="app-field" required>
               </label>
               <label
                 class="flex h-touch-target-min items-center justify-between gap-3 rounded-lg border border-outline-variant px-3">
@@ -849,8 +931,7 @@
                 </div>
                 <label class="block">
                   <span class="mb-1 block text-sm font-bold text-on-surface">Estoque exibido na comanda</span>
-                  <select id="productStockDisplaySelect"
-                    class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-4 text-sm">
+                  <select id="productStockDisplaySelect" class="app-field text-sm">
                     <option value="">Selecione um insumo</option>
                   </select>
                 </label>
@@ -935,8 +1016,7 @@
             class="settings-panel mt-stack-md hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
             <p class="text-sm font-bold text-on-surface">Categorias de Produtos</p>
             <form id="categoryForm" class="mt-2 flex items-center gap-2">
-              <input id="categoryNameInput" type="text"
-                class="h-touch-target-min min-w-0 flex-1 rounded-lg border border-outline-variant bg-surface-container-low px-4"
+              <input id="categoryNameInput" type="text" class="app-field min-w-0 flex-1"
                 placeholder="Ex: Drinks" required>
               <button type="submit"
                 class="h-touch-target-min shrink-0 whitespace-nowrap rounded-lg bg-primary px-3 text-sm font-bold text-on-primary sm:px-4">Adicionar</button>
@@ -949,8 +1029,7 @@
             class="settings-panel mt-stack-md hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
             <p class="text-sm font-bold text-on-surface">Formas de Pagamento</p>
             <form id="paymentMethodForm" class="mt-2 flex items-center gap-2">
-              <input id="paymentMethodNameInput" type="text"
-                class="h-touch-target-min min-w-0 flex-1 rounded-lg border border-outline-variant bg-surface-container-low px-4"
+              <input id="paymentMethodNameInput" type="text" class="app-field min-w-0 flex-1"
                 placeholder="Ex: Cartao Alimentacao" required>
               <button type="submit"
                 class="h-touch-target-min shrink-0 whitespace-nowrap rounded-lg bg-primary px-3 text-sm font-bold text-on-primary sm:px-4">Adicionar</button>
@@ -977,8 +1056,7 @@
             <label class="mt-stack-sm block">
               <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Data (fechamento ou
                 cancelamento)</span>
-              <input id="reopenFilterDateInput" type="date"
-                class="h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-4">
+              <input id="reopenFilterDateInput" type="date" class="app-field">
             </label>
             <button id="reopenSearchButton" type="button"
               class="mt-stack-sm h-touch-target-min w-full rounded-xl bg-primary text-sm font-bold text-on-primary">Buscar
@@ -1048,8 +1126,8 @@
     </div>
   </dialog>
 
-  <section id="detailDialog"
-    class="fixed inset-x-0 top-0 z-50 mx-auto hidden h-screen w-full max-w-[390px] overflow-auto bg-background px-margin-mobile pb-24 pt-4">
+  <section id="detailDialog" class="app-overlay hidden">
+    <div class="app-overlay-scroll px-margin-mobile pb-24 pt-4">
     <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
       <div class="mb-stack-sm flex items-start justify-between gap-3">
         <div>
@@ -1064,8 +1142,7 @@
         class="mt-stack-sm hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
         <label class="block">
           <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Mesa</span>
-          <input id="orderTableInput" type="text"
-            class="h-10 w-full rounded-lg border border-outline-variant px-3 text-sm" placeholder="Ex: Mesa 07"
+          <input id="orderTableInput" type="text" class="app-field text-sm" placeholder="Ex: Mesa 07"
             autocomplete="off">
         </label>
       </div>
@@ -1087,9 +1164,7 @@
         <h4 class="text-sm font-bold text-on-surface">Adicionar Item</h4>
         <label class="mt-2 block">
           <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Buscar por nome</span>
-          <input id="productSearchInput" type="text"
-            class="h-touch-target-min w-full rounded-lg border border-outline-variant px-4"
-            placeholder="Digite para filtrar">
+          <input id="productSearchInput" type="text" class="app-field" placeholder="Digite para filtrar">
         </label>
         <div class="mt-2">
           <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Categoria</span>
@@ -1119,8 +1194,7 @@
           <p class="text-xs font-bold uppercase text-on-surface-variant">Nome do Cliente (obrigatório)</p>
           <p id="detailCustomerHint" class="mt-1 text-xs text-on-surface-variant"></p>
           <div class="mt-2 flex flex-wrap gap-2">
-            <input id="detailCustomerInput" type="text"
-              class="h-10 min-w-0 flex-1 rounded-lg border border-outline-variant px-3 text-sm"
+            <input id="detailCustomerInput" type="text" class="app-field min-w-0 flex-1 text-sm"
               placeholder="Digite o nome do cliente" required>
             <button id="saveCustomerButton"
               class="h-10 w-full rounded-lg bg-primary px-3 text-sm font-bold text-on-primary sm:w-auto sm:shrink-0">Salvar</button>
@@ -1131,10 +1205,11 @@
       <button id="confirmDetailButton"
         class="mt-3 h-touch-target-min w-full rounded-xl bg-primary text-base font-bold text-on-primary shadow-sm transition">Confirmar</button>
     </div>
+    </div>
   </section>
 
-  <section id="checkoutDialog"
-    class="fixed inset-x-0 top-0 z-50 mx-auto hidden h-screen w-full max-w-[390px] overflow-auto bg-background px-margin-mobile pb-24 pt-4">
+  <section id="checkoutDialog" class="app-overlay hidden">
+    <div class="app-overlay-scroll px-margin-mobile pb-24 pt-4">
     <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
       <div class="mb-stack-sm flex items-center justify-between">
         <h3 class="text-lg font-extrabold text-primary">Fechamento</h3>
@@ -1145,8 +1220,8 @@
         class="space-y-2 rounded-xl border border-outline-variant bg-surface-container-lowest p-3"></div>
       <label id="serviceFeeField" class="mt-stack-sm block">
         <span class="mb-1 block text-sm font-bold">Taxa de Servico (%)</span>
-        <input id="serviceFeeInput" type="number" min="0" max="30" step="0.5"
-          class="h-touch-target-min w-full rounded-lg border border-outline-variant px-4" value="10">
+        <input id="serviceFeeInput" type="text" inputmode="decimal" autocomplete="off" class="app-field"
+          value="10">
       </label>
       <label class="mt-stack-sm block">
         <span class="mb-1 block text-sm font-bold">Formas de Pagamento</span>
@@ -1157,10 +1232,11 @@
         Comanda</button>
       <p id="checkoutFeedback" class="mt-2 text-sm text-error"></p>
     </div>
+    </div>
   </section>
 
-  <section id="cashCloseHistoryDialog"
-    class="fixed inset-x-0 top-0 z-50 mx-auto hidden h-screen w-full max-w-[390px] overflow-auto bg-background px-margin-mobile pb-24 pt-4">
+  <section id="cashCloseHistoryDialog" class="app-overlay hidden">
+    <div class="app-overlay-scroll px-margin-mobile pb-24 pt-4">
     <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
       <div class="mb-stack-sm flex items-center justify-between gap-2">
         <h3 class="text-lg font-extrabold text-primary">Historico de Fechamentos</h3>
@@ -1168,6 +1244,7 @@
           class="h-10 rounded-lg border border-outline px-3 text-sm font-bold">Fechar</button>
       </div>
       <div id="cashCloseHistoryBody"></div>
+    </div>
     </div>
   </section>
 

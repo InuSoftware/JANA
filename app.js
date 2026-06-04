@@ -2705,7 +2705,8 @@ function renderStockAdmin() {
         <div class="mt-2 grid gap-2 sm:grid-cols-2">
           <label class="block">
             <span class="mb-1 block text-[11px] font-bold uppercase text-on-surface-variant">Estoque atual</span>
-            <input type="number" step="1" class="stock-current-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm font-bold" value="${stock}">
+            <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              class="stock-current-input app-field text-sm font-bold" value="${stock}">
           </label>
           <div class="flex items-end">
             <button type="button" class="stock-save-one-button h-touch-target-min w-full rounded-lg bg-primary text-sm font-bold text-on-primary" data-product-id="${product.id}">Salvar</button>
@@ -2714,7 +2715,8 @@ function renderStockAdmin() {
         <div class="mt-2 flex flex-wrap items-end gap-2">
           <label class="min-w-0 flex-1">
             <span class="mb-1 block text-[11px] font-bold uppercase text-on-surface-variant">Adicionar (+)</span>
-            <input type="number" step="1" min="0" placeholder="10" class="stock-add-input h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm" value="">
+            <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              placeholder="10" class="stock-add-input app-field text-sm" value="">
           </label>
           <button type="button" class="stock-add-button h-touch-target-min shrink-0 rounded-lg border border-outline-variant bg-surface-container-high px-4 text-lg font-bold text-primary" title="Somar ao estoque" data-product-id="${product.id}">+</button>
         </div>
@@ -3281,7 +3283,7 @@ function renderReports() {
       <div class="mt-stack-md rounded-xl border border-outline-variant bg-surface-container-low px-3 py-3">
         <label for="cashCloseReferenceDateInput" class="text-xs font-bold text-on-surface">Este caixa e referente a qual dia?</label>
         <input type="date" id="cashCloseReferenceDateInput" value="${refYmd}"
-          class="mt-2 h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface" />
+          class="app-field mt-2 text-sm font-semibold" />
         <p class="mt-1.5 text-[10px] text-on-surface-variant">Usado nos relatorios e no historico (ex.: operacao da noite de <strong>${refDisplay || "—"}</strong> fechada depois da meia-noite). Voce pode ajustar antes de confirmar.</p>
       </div>
       ${
@@ -3698,7 +3700,7 @@ function fillProductForm(productId) {
   renderProductSpecialPanel(product.id);
   syncStockControlDependentUi();
   refs.productSubmitButton.textContent = "Atualizar";
-  refs.productNameInput.scrollIntoView({ behavior: "smooth", block: "center" });
+  scrollFocusedFieldIntoView(refs.productNameInput);
 }
 
 function clearProductForm() {
@@ -4608,12 +4610,119 @@ function bindPullToRefresh(scroller) {
   );
 }
 
+const MOBILE_FIELD_SELECTOR =
+  "input:not([type='hidden']):not([type='checkbox']):not([type='radio']), select, textarea";
+
+/** Campos com teclado numerico: type=number no mobile costuma baguncar viewport/scroll. */
+function isNumericKeyboardField(el) {
+  if (!(el instanceof HTMLInputElement)) return false;
+  if (el.type === "number") return true;
+  const mode = el.getAttribute("inputmode");
+  return mode === "numeric" || mode === "decimal";
+}
+
+function scheduleNumericFieldScroll(el) {
+  scrollFocusedFieldIntoView(el);
+  requestAnimationFrame(() => scrollFocusedFieldIntoView(el));
+  [120, 320, 600].forEach((ms) => {
+    setTimeout(() => {
+      if (document.activeElement === el) scrollFocusedFieldIntoView(el);
+    }, ms);
+  });
+}
+
+function getVisibleViewportTop() {
+  return window.visualViewport?.offsetTop ?? 0;
+}
+
+function getVisibleViewportBottom() {
+  const vv = window.visualViewport;
+  if (!vv) return window.innerHeight;
+  return vv.offsetTop + vv.height;
+}
+
+function findInputScrollRoot(el) {
+  let node = el.parentElement;
+  while (node && node !== document.body) {
+    if (
+      node.id === "mainContent" ||
+      node.id === "loginScreen" ||
+      node.classList.contains("app-overlay-scroll") ||
+      node.classList.contains("available-products-scroll")
+    ) {
+      return node;
+    }
+    const { overflowY } = getComputedStyle(node);
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight > node.clientHeight + 2
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return refs.mainContent || refs.loginScreen || null;
+}
+
+function scrollFocusedFieldIntoView(el) {
+  if (!el?.getBoundingClientRect) return;
+  const margin = 16;
+  const topBound = getVisibleViewportTop() + margin;
+  const bottomBound = getVisibleViewportBottom() - margin;
+  const rect = el.getBoundingClientRect();
+  if (rect.top >= topBound && rect.bottom <= bottomBound) return;
+
+  const root = findInputScrollRoot(el);
+  if (!root) {
+    if (!isNumericKeyboardField(el)) {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    return;
+  }
+  if (rect.bottom > bottomBound) {
+    root.scrollTop += rect.bottom - bottomBound;
+  } else if (rect.top < topBound) {
+    root.scrollTop -= topBound - rect.top;
+  }
+}
+
+function bindMobileKeyboardScroll() {
+  const refocusVisibleField = () => {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLElement) || !el.matches(MOBILE_FIELD_SELECTOR)) return;
+    if (isNumericKeyboardField(el)) {
+      scheduleNumericFieldScroll(el);
+      return;
+    }
+    scrollFocusedFieldIntoView(el);
+  };
+
+  document.addEventListener(
+    "focusin",
+    (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement) || !t.matches(MOBILE_FIELD_SELECTOR)) return;
+      if (isNumericKeyboardField(t)) {
+        scheduleNumericFieldScroll(t);
+        return;
+      }
+      requestAnimationFrame(() => scrollFocusedFieldIntoView(t));
+      setTimeout(() => scrollFocusedFieldIntoView(t), 320);
+    },
+    true,
+  );
+
+  window.visualViewport?.addEventListener("resize", refocusVisibleField);
+  window.visualViewport?.addEventListener("scroll", refocusVisibleField);
+}
+
 async function init() {
   const t = todayLocalYmd();
   state.reportDateFrom = t;
   state.reportDateTo = t;
   bindEvents();
   bindIosDoubleTapBlocker();
+  bindMobileKeyboardScroll();
   bindPullToRefresh(refs.mainContent);
   bindPullToRefresh(refs.loginScreen);
 
