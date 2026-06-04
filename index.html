@@ -183,6 +183,7 @@
 
     html {
       height: var(--app-height);
+      min-height: var(--app-height);
       overflow: hidden;
       overscroll-behavior: none;
     }
@@ -194,6 +195,21 @@
       overflow: hidden;
       overscroll-behavior: none;
       background-color: var(--bg-background);
+    }
+
+    /* iOS / atalho: innerHeight em px deixa faixa morta abaixo do rodape (area vermelha no print). */
+    html.is-ios {
+      --app-height: 100dvh;
+      height: 100dvh;
+      min-height: 100dvh;
+    }
+
+    html.is-ios body,
+    html.is-ios main.app-viewport-fill,
+    html.is-ios .app-shell {
+      height: 100dvh;
+      min-height: 100dvh;
+      max-height: 100dvh;
     }
 
     body {
@@ -370,21 +386,12 @@
       scroll-margin-bottom: 0.75rem;
     }
 
-    /* Atalho na tela inicial (iOS): altura minima da tela + safe-area no rodape. */
+    /* Safe-area: fundo da barra ate a borda; icones ficam logo acima do entalhe. */
     @supports (-webkit-touch-callout: none) {
-      html,
-      body {
-        min-height: 100dvh;
-      }
-    }
-
-    html.is-standalone .app-shell-nav {
-      padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
-    }
-
-    @media (display-mode: standalone) {
       .app-shell-nav {
-        padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
       }
     }
 
@@ -718,21 +725,25 @@
       }
 
       function setAppHeight() {
+        var standalone =
+          window.navigator.standalone === true ||
+          window.matchMedia("(display-mode: standalone)").matches;
+        var ios = isLikelyIos();
+        document.documentElement.classList.toggle("is-ios", ios);
+        document.documentElement.classList.toggle("is-standalone", standalone);
+
+        if (ios && !isKeyboardOpen()) {
+          document.documentElement.style.setProperty("--app-height", "100dvh");
+          return;
+        }
+
         var h = isKeyboardOpen()
           ? window.innerHeight
           : Math.max(
               window.innerHeight,
               document.documentElement.clientHeight || 0,
             );
-        var vv = window.visualViewport;
-        if (!isKeyboardOpen() && isLikelyIos() && vv) {
-          h = Math.max(h, Math.round(vv.height + (vv.offsetTop || 0)));
-        }
         document.documentElement.style.setProperty("--app-height", h + "px");
-        var standalone =
-          window.navigator.standalone === true ||
-          window.matchMedia("(display-mode: standalone)").matches;
-        document.documentElement.classList.toggle("is-standalone", standalone);
       }
 
       setAppHeight();
