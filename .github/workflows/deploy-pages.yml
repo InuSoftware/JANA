@@ -20,20 +20,17 @@ permissions:
   pages: write
   id-token: write
 
+# So um deploy por vez: push novo cancela workflow antigo ainda rodando (recomendacao GitHub Pages).
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Evita aviso de deprecação Node 20 nos actions oficiais até migração global do runner.
-    # https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment_retry.outputs.page_url || steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +68,17 @@ jobs:
         with:
           path: _site
 
+      # O passo de deploy pode terminar no CI antes do Pages liberar o slot; retry evita 400 em push seguido.
       - name: Deploy to GitHub Pages
         id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait for Pages slot
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 120
+
+      - name: Deploy to GitHub Pages (retry)
+        if: steps.deployment.outcome == 'failure'
+        id: deployment_retry
         uses: actions/deploy-pages@v4
