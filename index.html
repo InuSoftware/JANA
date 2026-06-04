@@ -243,6 +243,11 @@
       color: var(--text-on-surface);
     }
 
+    /* Icone absoluto a left-4: precisa de pl-12; utilitario Tailwind perde para input.app-field. */
+    input.app-field.app-input {
+      padding-left: 3rem;
+    }
+
     input.app-field:focus,
     select.app-field:focus,
     textarea.app-field:focus,
