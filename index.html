@@ -212,8 +212,10 @@
       font-size: 16px !important;
     }
 
-    /* Campo editavel padrao (altura toque, borda, foco). */
-    .app-field {
+    /* Campo editavel padrao (altura toque, borda, foco) — mesmo raio que rounded-lg dos botoes. */
+    input.app-field,
+    select.app-field,
+    textarea.app-field {
       box-sizing: border-box;
       min-height: 48px;
       width: 100%;
@@ -225,7 +227,9 @@
       color: var(--text-on-surface);
     }
 
-    .app-field:focus,
+    input.app-field:focus,
+    select.app-field:focus,
+    textarea.app-field:focus,
     .app-input:focus {
       outline: none;
       border-color: transparent !important;
@@ -236,17 +240,17 @@
     }
 
     /* type=number no mobile costuma empurrar o layout; usamos text + inputmode. */
-    .app-field[inputmode="numeric"],
-    .app-field[inputmode="decimal"] {
+    input.app-field[inputmode="numeric"],
+    input.app-field[inputmode="decimal"] {
       touch-action: manipulation;
       -moz-appearance: textfield;
       appearance: textfield;
     }
 
-    .app-field[inputmode="numeric"]::-webkit-outer-spin-button,
-    .app-field[inputmode="numeric"]::-webkit-inner-spin-button,
-    .app-field[inputmode="decimal"]::-webkit-outer-spin-button,
-    .app-field[inputmode="decimal"]::-webkit-inner-spin-button {
+    input.app-field[inputmode="numeric"]::-webkit-outer-spin-button,
+    input.app-field[inputmode="numeric"]::-webkit-inner-spin-button,
+    input.app-field[inputmode="decimal"]::-webkit-outer-spin-button,
+    input.app-field[inputmode="decimal"]::-webkit-inner-spin-button {
       -webkit-appearance: none;
       margin: 0;
     }
