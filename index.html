@@ -101,6 +101,9 @@
     }
 
     .bottom-tab {
+      min-height: 2.75rem;
+      padding-top: 0.375rem;
+      padding-bottom: 0.375rem;
       transition:
         background-color 0.2s ease,
         color 0.2s ease,
@@ -406,23 +409,33 @@
       scroll-padding-top: 1rem;
     }
 
-    /* Rodape no fluxo do shell (nao fixed): encosta no fundo; safe area fica DENTRO da row. */
+    /* Rodape: flex no Safari; no atalho iOS fixo no mesmo bottom da comanda (overlay). */
     .app-shell-nav {
       flex: 0 0 auto;
       width: 100%;
       box-sizing: border-box;
-      padding-bottom: 0;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
       background-color: var(--bg-surface);
     }
 
     .app-shell-nav__row {
       display: flex;
       min-height: 3.25rem;
-      align-items: stretch;
+      align-items: center;
       gap: 0.25rem;
-      padding: 0.25rem 0.5rem;
-      padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px));
+      padding: 0.5rem 0.5rem;
       box-sizing: border-box;
+    }
+
+    /* Atalho: nav colada no fundo do viewport como a comanda (inset 0). */
+    html.is-ios.is-standalone #appBottomNav.app-shell-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
     }
 
     /* Ultimo CTA nas abas (ex. Confirmar em Config) — espaco extra ao rolar ate o fim. */
@@ -433,7 +446,7 @@
     :root {
       --app-height: 100dvh;
       --app-nav-row: 3.25rem;
-      --app-nav-block: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+      --app-nav-block: calc(4.25rem + env(safe-area-inset-bottom, 0px));
       --app-scroll-footer-pad: 6rem;
       --bg-background: #fbf9fc;
       --bg-surface: #fbf9fc;
