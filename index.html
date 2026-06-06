@@ -370,25 +370,46 @@
       overscroll-behavior-y: contain;
     }
 
-    /* Telas cheias (comanda, fechamento): mesma largura do shell principal. */
+    /* Telas cheias (comanda, fechamento): ancora no viewport (igual altura visual da comanda). */
     .app-overlay {
       position: fixed;
       top: 0;
-      left: 0;
       right: 0;
+      bottom: 0;
+      left: 0;
       z-index: 50;
       display: flex;
       box-sizing: border-box;
       width: 100%;
       max-width: none;
-      height: var(--app-height);
-      max-height: var(--app-height);
+      height: auto;
+      max-height: none;
       flex-direction: column;
       overflow: hidden;
       padding-top: env(safe-area-inset-top, 0px);
       padding-left: env(safe-area-inset-left, 0px);
       padding-right: env(safe-area-inset-right, 0px);
       background-color: var(--bg-background);
+    }
+
+    /*
+     * Atalho (Add to Home): shell no fluxo para antes do fim da tela; comanda (fixed) ia mais
+     * para baixo. Shell fixo inset 0 alinha a nav com o mesmo limite inferior da comanda.
+     */
+    html.is-standalone #appScreen.app-shell {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 1;
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      max-height: none;
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+      box-sizing: border-box;
     }
 
     .app-overlay-scroll {
@@ -405,7 +426,6 @@
       flex: 0 0 auto;
       width: 100%;
       box-sizing: border-box;
-      padding-bottom: env(safe-area-inset-bottom, 0px);
       background-color: var(--bg-surface);
     }
 
@@ -418,17 +438,28 @@
       box-sizing: border-box;
     }
 
+    .app-shell-nav {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
     /* Ultimo CTA nas abas (ex. Confirmar em Config) — espaco extra ao rolar ate o fim. */
     .main-bottom-action {
       scroll-margin-bottom: 0.75rem;
     }
 
-    /* Safe-area: fundo da barra ate a borda; icones ficam logo acima do entalhe. */
     @supports (-webkit-touch-callout: none) {
       .app-shell-nav {
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
+      }
+
+      /*
+       * No atalho iOS o inset-bottom costuma ser 0; sem isso a nav sobe e sobra faixa
+       * abaixo dos botoes (comanda, sem nav, ia ate mais embaixo).
+       */
+      html.is-standalone .app-shell-nav {
+        padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
       }
     }
 
