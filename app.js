@@ -1331,9 +1331,6 @@ const refs = {
   serviceFeeInput: document.querySelector("#serviceFeeInput"),
   confirmCheckoutButton: document.querySelector("#confirmCheckoutButton"),
   checkoutFeedback: document.querySelector("#checkoutFeedback"),
-  openSplitBillFromDetailButton: document.querySelector(
-    "#openSplitBillFromDetailButton",
-  ),
   openSplitBillFromCheckoutButton: document.querySelector(
     "#openSplitBillFromCheckoutButton",
   ),
@@ -3569,10 +3566,6 @@ function renderOrderDetails() {
         .join("")
     : "<li class='order-list-empty rounded-xl p-3 text-sm'>Nenhum item lancado.</li>";
   refs.orderItemsList.innerHTML = itemsHtml;
-  refs.openSplitBillFromDetailButton?.classList.toggle(
-    "hidden",
-    isLocked || !items.length,
-  );
   if (status === "Finalizado" && order.totalPaid != null) {
     refs.orderSubtotalLabel.textContent = `Total pago: ${formatCurrency(order.totalPaid)}`;
   } else {
@@ -5014,9 +5007,6 @@ function bindEvents() {
     closeMergeOrdersDialog();
   });
   bindMergeOrdersInteractionsOnce();
-  refs.openSplitBillFromDetailButton?.addEventListener("click", () => {
-    openSplitBillDialog("detail");
-  });
   refs.openSplitBillFromCheckoutButton?.addEventListener("click", () => {
     openSplitBillDialog("checkout");
   });
