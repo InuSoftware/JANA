@@ -345,6 +345,11 @@
       scroll-padding-bottom: var(--app-scroll-footer-pad);
     }
 
+    /* Comanda finalizada (so visualizacao): mais respiro no topo. */
+    #detailDialog.detail-view--finalized .app-overlay-scroll {
+      padding-top: 3rem;
+    }
+
     .app-viewport-fill {
       box-sizing: border-box;
       width: 100%;
@@ -739,6 +744,71 @@
     .available-products-scroll>li {
       min-height: var(--product-picker-row);
       box-sizing: border-box;
+    }
+
+    /* Comanda: chips de categoria, catalogo e linhas de item — tokens do tema (nao slate fixo). */
+    .category-filter-button {
+      background-color: var(--bg-surface-high);
+      color: var(--text-on-surface-variant);
+    }
+
+    .category-filter-button--selected {
+      background-color: var(--bg-primary-container);
+      color: var(--text-on-primary-container);
+    }
+
+    [data-theme="dark-pro"] .category-filter-button--selected {
+      background-color: var(--bg-primary);
+      color: var(--text-on-primary);
+      box-shadow: 0 0 0 1px rgba(173, 199, 248, 0.38);
+    }
+
+    .catalog-product-card {
+      border: 1px solid var(--border-outline-variant);
+      background-color: var(--bg-surface-low);
+    }
+
+    [data-theme="dark-pro"] .catalog-product-card {
+      background-color: var(--bg-surface-lowest);
+      border-color: var(--border-outline);
+    }
+
+    .order-item-row {
+      border: 1px solid var(--border-outline-variant);
+      background-color: var(--bg-surface-low);
+    }
+
+    [data-theme="dark-pro"] .order-item-row {
+      background-color: var(--bg-surface-lowest);
+      border-color: var(--border-outline);
+    }
+
+    .order-item-row__name {
+      color: var(--text-on-surface);
+    }
+
+    .order-item-row__meta {
+      color: var(--text-on-surface-variant);
+    }
+
+    .order-list-empty {
+      border: 1px solid var(--border-outline-variant);
+      color: var(--text-on-surface-variant);
+    }
+
+    .qty-stepper-btn {
+      border: 1px solid var(--border-outline-variant);
+      background-color: var(--bg-surface-high);
+      color: var(--text-on-surface);
+    }
+
+    [data-theme="dark-pro"] .qty-stepper-btn {
+      background-color: var(--bg-surface-low);
+      border-color: var(--border-outline);
+    }
+
+    .checkout-total-divider {
+      border-color: var(--border-outline-variant);
     }
   </style>
   <script>
@@ -1288,7 +1358,7 @@
         </label>
         <div class="mt-2">
           <span class="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Categoria</span>
-          <div class="settings-tabs-wrap">
+          <div class="settings-tabs-wrap settings-tabs-wrap--panel">
             <div id="categoryTabsLeftHint" class="settings-tabs-hint settings-tabs-hint-left">
               <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_left</span>
             </div>

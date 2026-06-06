@@ -2882,7 +2882,7 @@ function renderCategoryOptions() {
   refs.categoryButtons.innerHTML = categories
     .map(
       (category) => `
-      <button class="category-filter-button h-10 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.selectedCategory ? "bg-primary-container text-on-primary-container" : "bg-surface-container-high text-on-surface-variant"}" data-category="${category}">
+      <button type="button" class="category-filter-button h-10 whitespace-nowrap rounded-full px-3 text-xs font-bold ${category === state.selectedCategory ? "category-filter-button--selected" : ""}" data-category="${category}">
         ${category}
       </button>
     `,
@@ -2915,6 +2915,10 @@ function renderOrderDetails() {
   const launchMode = state.detailAction === "add";
   const status = normalizeOrderStatus(order.status);
   const isLocked = status === "Finalizado" || status === "Cancelada";
+  refs.detailDialog.classList.toggle(
+    "detail-view--finalized",
+    status === "Finalizado",
+  );
   if (refs.detailCustomerHint) {
     if (isLocked) {
       refs.detailCustomerHint.textContent =
@@ -2986,7 +2990,7 @@ function renderOrderDetails() {
     ? filteredProducts
         .map(
           (product) => `
-        <li class="rounded-xl border border-outline-variant/80 bg-surface-container-lowest/50 p-2">
+        <li class="catalog-product-card rounded-xl p-2">
           <div class="flex items-start justify-between gap-2">
             <p class="min-w-0 flex-1 text-sm font-semibold leading-snug text-on-surface">${product.name}</p>
             ${formatProductStockHintForCatalog(product)}
@@ -2997,7 +3001,7 @@ function renderOrderDetails() {
       `,
         )
         .join("")
-    : "<li class='rounded-xl border border-slate-200 p-3 text-sm text-slate-500'>Nenhum produto encontrado.</li>";
+    : "<li class='order-list-empty rounded-xl p-3 text-sm'>Nenhum produto encontrado.</li>";
 
   const items = order.items || [];
   const itemsHtml = items.length
@@ -3027,11 +3031,11 @@ function renderOrderDetails() {
             ? ` data-line-id="${item.lineId}"`
             : "";
           return `
-        <li class="rounded-xl border border-slate-200 p-2">
+        <li class="order-item-row rounded-xl p-2">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold">${item.name}</p>
-              <p class="text-xs text-slate-500">${formatCurrency(item.price)} cada</p>
+              <p class="order-item-row__name text-sm font-semibold">${item.name}</p>
+              <p class="order-item-row__meta text-xs">${formatCurrency(item.price)} cada</p>
               ${
                 showTimer
                   ? `<p class="order-line-timer mt-0.5 text-[11px] tabular-nums tracking-tight text-on-surface-variant"${lineIdAttr} data-requested-at="${item.requestedAt}">${formatElapsedClock(
@@ -3057,9 +3061,9 @@ function renderOrderDetails() {
                 isLocked
                   ? `<span class="text-sm font-bold text-on-surface-variant">Qtd. ${item.qty}</span>`
                   : `<div class="flex items-center gap-2">
-                <button type="button" class="qty-minus h-10 w-10 rounded-lg border border-slate-300 text-lg font-bold" data-index="${index}">-</button>
-                <span class="w-6 text-center text-sm font-bold">${item.qty}</span>
-                <button type="button" class="qty-plus h-10 w-10 rounded-lg border border-slate-300 text-lg font-bold" data-index="${index}">+</button>
+                <button type="button" class="qty-stepper-btn qty-minus h-10 w-10 rounded-lg text-lg font-bold" data-index="${index}">-</button>
+                <span class="w-6 text-center text-sm font-bold text-on-surface">${item.qty}</span>
+                <button type="button" class="qty-stepper-btn qty-plus h-10 w-10 rounded-lg text-lg font-bold" data-index="${index}">+</button>
               </div>`
               }
             </div>
@@ -3067,7 +3071,7 @@ function renderOrderDetails() {
         </li>`;
         })
         .join("")
-    : "<li class='rounded-xl border border-slate-200 p-3 text-sm text-slate-500'>Nenhum item lancado.</li>";
+    : "<li class='order-list-empty rounded-xl p-3 text-sm'>Nenhum item lancado.</li>";
   refs.orderItemsList.innerHTML = itemsHtml;
   if (status === "Finalizado" && order.totalPaid != null) {
     refs.orderSubtotalLabel.textContent = `Total pago: ${formatCurrency(order.totalPaid)}`;
@@ -3092,7 +3096,7 @@ function renderCheckoutSummary() {
   refs.checkoutSummary.innerHTML = `
     <p class="flex justify-between text-sm"><span>Subtotal</span><span class="font-semibold">${formatCurrency(subtotal)}</span></p>
     <p class="flex justify-between text-sm"><span>Taxa (${feePercent.toFixed(1)}%)</span><span class="font-semibold">${formatCurrency(feeValue)}</span></p>
-    <p class="flex justify-between border-t border-slate-200 pt-2 text-base font-bold"><span>Total</span><span>${formatCurrency(total)}</span></p>
+    <p class="checkout-total-divider flex justify-between border-t pt-2 text-base font-bold text-on-surface"><span>Total</span><span>${formatCurrency(total)}</span></p>
   `;
 }
 
