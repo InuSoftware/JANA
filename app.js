@@ -1200,6 +1200,9 @@ const state = {
   cashCloseReferenceDateYmd: "",
   cashCloseReferenceShiftId: null,
   cashCloseHistoryExpandedId: null,
+  splitBillReturnView: "detail",
+  splitBillPersonCount: 2,
+  splitBillAssignments: [],
   config: {
     id: 1,
     useTables: false,
@@ -1326,6 +1329,15 @@ const refs = {
   serviceFeeInput: document.querySelector("#serviceFeeInput"),
   confirmCheckoutButton: document.querySelector("#confirmCheckoutButton"),
   checkoutFeedback: document.querySelector("#checkoutFeedback"),
+  openSplitBillFromDetailButton: document.querySelector(
+    "#openSplitBillFromDetailButton",
+  ),
+  openSplitBillFromCheckoutButton: document.querySelector(
+    "#openSplitBillFromCheckoutButton",
+  ),
+  acertoDialog: document.querySelector("#acertoDialog"),
+  closeAcertoDialogButton: document.querySelector("#closeAcertoDialogButton"),
+  splitBillBody: document.querySelector("#splitBillBody"),
   cashCloseHistoryDialog: document.querySelector("#cashCloseHistoryDialog"),
   closeCashCloseHistoryButton: document.querySelector(
     "#closeCashCloseHistoryButton",
@@ -1724,6 +1736,284 @@ function getCurrentOrder() {
 function calculateOrderSubtotal(order) {
   const items = order.items || [];
   return items.reduce((sum, item) => sum + item.price * item.qty, 0);
+}
+
+const SPLIT_BILL_MIN_PEOPLE = 2;
+const SPLIT_BILL_MAX_PEOPLE = 10;
+
+function clampSplitBillPersonCount(count) {
+  return Math.max(
+    SPLIT_BILL_MIN_PEOPLE,
+    Math.min(SPLIT_BILL_MAX_PEOPLE, Number(count) || SPLIT_BILL_MIN_PEOPLE),
+  );
+}
+
+function initSplitBillAssignments(items, personCount) {
+  const count = clampSplitBillPersonCount(personCount);
+  return (items || []).map(() => Array(count).fill(0));
+}
+
+function resizeSplitBillAssignments(assignments, items, newPersonCount) {
+  const count = clampSplitBillPersonCount(newPersonCount);
+  return (assignments || []).map((row, i) => {
+    const maxQty = items[i]?.qty || 0;
+    const prev = [...(row || [])];
+    while (prev.length < count) prev.push(0);
+    if (prev.length > count) prev.length = count;
+    let total = prev.reduce((sum, qty) => sum + qty, 0);
+    if (total > maxQty) {
+      let excess = total - maxQty;
+      for (let p = prev.length - 1; p >= 0 && excess > 0; p -= 1) {
+        const take = Math.min(prev[p], excess);
+        prev[p] -= take;
+        excess -= take;
+      }
+    }
+    return prev;
+  });
+}
+
+function adjustSplitBillQty(assignments, itemIndex, personIndex, delta, itemQty) {
+  const rows = (assignments || []).map((row) => [...row]);
+  const row = rows[itemIndex];
+  if (!row || personIndex < 0 || personIndex >= row.length) return rows;
+  const assigned = row.reduce((sum, qty) => sum + qty, 0);
+  const unassigned = itemQty - assigned;
+  const current = row[personIndex] || 0;
+  if (delta > 0) {
+    if (unassigned <= 0) return rows;
+    row[personIndex] = current + Math.min(delta, unassigned);
+  } else {
+    row[personIndex] = Math.max(0, current + delta);
+  }
+  return rows;
+}
+
+function computeSplitBillResult(items, assignments, personCount, serviceFeePercent) {
+  const count = clampSplitBillPersonCount(personCount);
+  const personSubtotals = Array(count).fill(0);
+  let orderSubtotal = 0;
+  let unassignedSubtotal = 0;
+
+  (items || []).forEach((item, index) => {
+    const lineSubtotal = item.price * item.qty;
+    orderSubtotal += lineSubtotal;
+    const row = assignments[index] || [];
+    let assignedQty = 0;
+    for (let person = 0; person < count; person += 1) {
+      const qty = row[person] || 0;
+      personSubtotals[person] += qty * item.price;
+      assignedQty += qty;
+    }
+    unassignedSubtotal += (item.qty - assignedQty) * item.price;
+  });
+
+  const feePercent = Math.max(0, Number(serviceFeePercent) || 0);
+  const feeMultiplier = 1 + feePercent / 100;
+  const personTotals = personSubtotals.map((subtotal) => subtotal * feeMultiplier);
+
+  return {
+    personSubtotals,
+    personTotals,
+    unassignedSubtotal,
+    unassignedTotal: unassignedSubtotal * feeMultiplier,
+    orderSubtotal,
+    orderTotal: orderSubtotal * feeMultiplier,
+    serviceFeePercent: feePercent,
+    serviceFeeValue: orderSubtotal * (feePercent / 100),
+  };
+}
+
+function getSplitBillServiceFeePercent(order) {
+  if (!state.config.useServiceFee) return 0;
+  if (state.splitBillReturnView === "checkout") {
+    return Number(refs.serviceFeeInput?.value) || 0;
+  }
+  return Number(order?.serviceFeePercent) || 10;
+}
+
+function openSplitBillDialog(fromView) {
+  const order = getCurrentOrder();
+  if (!order?.items?.length) return;
+  state.splitBillReturnView = fromView || state.currentView;
+  state.splitBillPersonCount = SPLIT_BILL_MIN_PEOPLE;
+  state.splitBillAssignments = initSplitBillAssignments(
+    order.items,
+    state.splitBillPersonCount,
+  );
+  state.currentView = "acerto";
+  renderSplitBill();
+  renderView();
+}
+
+function closeSplitBillDialog() {
+  const returnView = state.splitBillReturnView || "detail";
+  state.currentView =
+    returnView === "checkout" || returnView === "detail" ? returnView : "main";
+  renderView();
+  if (state.currentView === "detail" || state.currentView === "checkout") {
+    renderOrderDetails();
+    if (state.currentView === "checkout") {
+      renderCheckoutSummary();
+    }
+  }
+}
+
+function renderSplitBill() {
+  if (!refs.splitBillBody) return;
+  const order = getCurrentOrder();
+  if (!order?.items?.length) {
+    refs.splitBillBody.innerHTML =
+      "<p class='text-sm text-on-surface-variant'>Nenhum item na comanda.</p>";
+    return;
+  }
+
+  const items = order.items;
+  const personCount = clampSplitBillPersonCount(state.splitBillPersonCount);
+  state.splitBillPersonCount = personCount;
+  if (!state.splitBillAssignments?.length) {
+    state.splitBillAssignments = initSplitBillAssignments(items, personCount);
+  } else {
+    state.splitBillAssignments = resizeSplitBillAssignments(
+      state.splitBillAssignments,
+      items,
+      personCount,
+    );
+  }
+
+  const feePercent = getSplitBillServiceFeePercent(order);
+  const result = computeSplitBillResult(
+    items,
+    state.splitBillAssignments,
+    personCount,
+    feePercent,
+  );
+
+  const itemsHtml = items
+    .map((item, itemIndex) => {
+      const row = state.splitBillAssignments[itemIndex] || [];
+      const assignedQty = row.reduce((sum, qty) => sum + qty, 0);
+      const unassignedQty = item.qty - assignedQty;
+      const peopleRows = Array.from({ length: personCount }, (_, personIndex) => {
+        const qty = row[personIndex] || 0;
+        return `
+          <div class="mt-1 flex items-center justify-between gap-2">
+            <span class="text-xs text-on-surface-variant">Pessoa ${personIndex + 1}</span>
+            <div class="flex items-center gap-2">
+              <button type="button" class="split-bill-qty-btn qty-stepper-btn qty-minus h-9 w-9 rounded-lg text-base font-bold" data-item-index="${itemIndex}" data-person-index="${personIndex}" data-delta="-1">-</button>
+              <span class="w-5 text-center text-sm font-bold text-on-surface">${qty}</span>
+              <button type="button" class="split-bill-qty-btn qty-stepper-btn qty-plus h-9 w-9 rounded-lg text-base font-bold" data-item-index="${itemIndex}" data-person-index="${personIndex}" data-delta="1">+</button>
+            </div>
+          </div>`;
+      }).join("");
+
+      return `
+        <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-on-surface">${item.name}</p>
+              <p class="text-xs text-on-surface-variant">${formatCurrency(item.price)} cada • ${item.qty} un.</p>
+            </div>
+            <p class="shrink-0 text-sm font-bold text-primary">${formatCurrency(item.price * item.qty)}</p>
+          </div>
+          <div class="mt-2">${peopleRows}</div>
+          ${
+            unassignedQty > 0
+              ? `<p class="mt-2 text-xs font-semibold text-error">${unassignedQty} un. sem atribuir (${formatCurrency(unassignedQty * item.price)})</p>`
+              : `<p class="mt-2 text-xs text-secondary">Tudo atribuido</p>`
+          }
+        </li>`;
+    })
+    .join("");
+
+  const totalsHtml = Array.from({ length: personCount }, (_, personIndex) => {
+    const subtotal = result.personSubtotals[personIndex] || 0;
+    const total = result.personTotals[personIndex] || 0;
+    const feeLine =
+      feePercent > 0
+        ? `<p class="text-[11px] text-on-surface-variant">Subtotal ${formatCurrency(subtotal)} + taxa ${feePercent.toFixed(1)}%</p>`
+        : "";
+    return `
+      <div class="flex items-start justify-between gap-2 rounded-lg bg-surface-container-low px-2 py-2">
+        <div>
+          <p class="text-sm font-semibold text-on-surface">Pessoa ${personIndex + 1}</p>
+          ${feeLine}
+        </div>
+        <p class="text-base font-extrabold text-primary">${formatCurrency(total)}</p>
+      </div>`;
+  }).join("");
+
+  refs.splitBillBody.innerHTML = `
+    <p class="text-sm text-on-surface-variant">Distribua os itens entre as pessoas para saber quanto cada uma deve pagar. Isso nao altera o fechamento da comanda.</p>
+    <div class="mt-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+      <p class="text-sm font-bold text-on-surface">Quantas pessoas vao pagar?</p>
+      <div class="mt-2 flex items-center justify-center gap-3">
+        <button type="button" class="split-bill-person-btn qty-stepper-btn qty-minus h-10 w-10 rounded-lg text-lg font-bold" data-delta="-1" ${personCount <= SPLIT_BILL_MIN_PEOPLE ? "disabled" : ""}>-</button>
+        <span class="min-w-[3rem] text-center text-xl font-extrabold text-primary">${personCount}</span>
+        <button type="button" class="split-bill-person-btn qty-stepper-btn qty-plus h-10 w-10 rounded-lg text-lg font-bold" data-delta="1" ${personCount >= SPLIT_BILL_MAX_PEOPLE ? "disabled" : ""}>+</button>
+      </div>
+    </div>
+    <div class="mt-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+      <h4 class="text-sm font-bold text-on-surface">Itens da comanda</h4>
+      <ul class="mt-2 space-y-2">${itemsHtml}</ul>
+    </div>
+    <div class="mt-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+      <h4 class="text-sm font-bold text-on-surface">Total por pessoa</h4>
+      <div class="mt-2 space-y-2">${totalsHtml}</div>
+      ${
+        result.unassignedSubtotal > 0
+          ? `<p class="mt-2 text-xs font-semibold text-error">Sem atribuir: ${formatCurrency(result.unassignedTotal)}</p>`
+          : ""
+      }
+      <p class="checkout-total-divider mt-2 flex justify-between border-t pt-2 text-base font-bold text-on-surface">
+        <span>Total da comanda</span>
+        <span>${formatCurrency(result.orderTotal)}</span>
+      </p>
+      ${
+        feePercent > 0
+          ? `<p class="mt-1 text-right text-xs text-on-surface-variant">Inclui taxa de servico de ${feePercent.toFixed(1)}% (${formatCurrency(result.serviceFeeValue)})</p>`
+          : ""
+      }
+    </div>`;
+}
+
+function bindSplitBillInteractionsOnce() {
+  if (!refs.splitBillBody || refs.splitBillBody.dataset.bound === "1") return;
+  refs.splitBillBody.dataset.bound = "1";
+  refs.splitBillBody.addEventListener("click", (event) => {
+    const order = getCurrentOrder();
+    if (!order?.items?.length) return;
+
+    const personBtn = event.target.closest(".split-bill-person-btn");
+    if (personBtn && !personBtn.disabled) {
+      const delta = Number(personBtn.dataset.delta) || 0;
+      state.splitBillPersonCount = clampSplitBillPersonCount(
+        state.splitBillPersonCount + delta,
+      );
+      state.splitBillAssignments = resizeSplitBillAssignments(
+        state.splitBillAssignments,
+        order.items,
+        state.splitBillPersonCount,
+      );
+      renderSplitBill();
+      return;
+    }
+
+    const qtyBtn = event.target.closest(".split-bill-qty-btn");
+    if (!qtyBtn) return;
+    const itemIndex = Number(qtyBtn.dataset.itemIndex);
+    const personIndex = Number(qtyBtn.dataset.personIndex);
+    const delta = Number(qtyBtn.dataset.delta) || 0;
+    const itemQty = order.items[itemIndex]?.qty || 0;
+    state.splitBillAssignments = adjustSplitBillQty(
+      state.splitBillAssignments,
+      itemIndex,
+      personIndex,
+      delta,
+      itemQty,
+    );
+    renderSplitBill();
+  });
 }
 
 /** Soma totalPaid de comandas finalizadas com closedAt na faixa de datas locais [fromYmd, toYmd] inclusive. */
@@ -2440,11 +2730,13 @@ function renderView() {
   const onMain = state.currentView === "main";
   const onDetail = state.currentView === "detail";
   const onCheckout = state.currentView === "checkout";
+  const onAcerto = state.currentView === "acerto";
 
   refs.mainContent.classList.toggle("hidden", !onMain);
   refs.appHeader.classList.toggle("hidden", !onMain);
   refs.detailDialog.classList.toggle("hidden", !onDetail);
   refs.checkoutDialog.classList.toggle("hidden", !onCheckout);
+  refs.acertoDialog?.classList.toggle("hidden", !onAcerto);
   syncOrderItemsTimerInterval();
 }
 
@@ -3089,6 +3381,10 @@ function renderOrderDetails() {
         .join("")
     : "<li class='order-list-empty rounded-xl p-3 text-sm'>Nenhum item lancado.</li>";
   refs.orderItemsList.innerHTML = itemsHtml;
+  refs.openSplitBillFromDetailButton?.classList.toggle(
+    "hidden",
+    isLocked || !items.length,
+  );
   if (status === "Finalizado" && order.totalPaid != null) {
     refs.orderSubtotalLabel.textContent = `Total pago: ${formatCurrency(order.totalPaid)}`;
   } else {
@@ -3402,13 +3698,20 @@ function renderAll() {
   if (state.selectedTab === "reportsTab") {
     renderReports();
   }
-  if (state.currentView === "detail" || state.currentView === "checkout") {
+  if (
+    state.currentView === "detail" ||
+    state.currentView === "checkout" ||
+    state.currentView === "acerto"
+  ) {
     renderCategoryOptions();
     renderOrderDetails();
   }
   if (state.currentView === "checkout") {
     renderCheckoutPaymentMethods();
     renderCheckoutSummary();
+  }
+  if (state.currentView === "acerto") {
+    renderSplitBill();
   }
 }
 
@@ -4334,6 +4637,16 @@ function bindEvents() {
     refs.checkoutFeedback.textContent = "";
     renderAll();
   });
+  refs.openSplitBillFromDetailButton?.addEventListener("click", () => {
+    openSplitBillDialog("detail");
+  });
+  refs.openSplitBillFromCheckoutButton?.addEventListener("click", () => {
+    openSplitBillDialog("checkout");
+  });
+  refs.closeAcertoDialogButton?.addEventListener("click", () => {
+    closeSplitBillDialog();
+  });
+  bindSplitBillInteractionsOnce();
   refs.closeCashCloseHistoryButton?.addEventListener(
     "click",
     closeCashCloseHistoryDialog,
@@ -5024,6 +5337,14 @@ if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
     isPendingLocalOrder,
     getCurrentOrder,
     calculateOrderSubtotal,
+    clampSplitBillPersonCount,
+    initSplitBillAssignments,
+    resizeSplitBillAssignments,
+    adjustSplitBillQty,
+    computeSplitBillResult,
+    openSplitBillDialog,
+    closeSplitBillDialog,
+    renderSplitBill,
     calculatePaidInDateRange,
     finalizedOrdersInLocalDateRange,
     aggregatePaymentMethodShares,

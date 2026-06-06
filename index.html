@@ -669,6 +669,15 @@
       box-sizing: border-box;
     }
 
+    /* Lancamento de estoque: rolagem so na lista; Salvar todos fica visivel acima. */
+    .stock-products-scroll {
+      --stock-picker-row: 10.5rem;
+      max-height: calc(3 * var(--stock-picker-row) + 0.75rem);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+    }
+
     /* Comanda: chips de categoria, catalogo e linhas de item — tokens do tema (nao slate fixo). */
     .category-filter-button {
       background-color: var(--bg-surface-high);
@@ -1086,7 +1095,7 @@
               class="mt-stack-sm h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-low text-sm font-bold text-on-surface">Salvar
               todos</button>
             <p id="stockAdminFeedback" class="mt-2 min-h-[1rem] text-xs text-on-surface-variant"></p>
-            <ul id="stockProductsList" class="mt-stack-md space-y-stack-sm"></ul>
+            <ul id="stockProductsList" class="stock-products-scroll mt-stack-sm space-y-stack-sm pr-0.5"></ul>
           </div>
 
           <div id="operationSettingsPanel"
@@ -1291,6 +1300,9 @@
         <h4 class="text-sm font-bold text-on-surface">Itens da Comanda</h4>
         <ul id="orderItemsList" class="mt-2 space-y-2"></ul>
         <p id="orderSubtotalLabel" class="mt-2 text-right text-base font-extrabold text-primary">Subtotal: R$ 0,00</p>
+        <button id="openSplitBillFromDetailButton" type="button"
+          class="mt-2 hidden h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface text-sm font-bold text-primary shadow-sm transition">Acerto
+          entre pessoas</button>
       </div>
       <div id="detailCustomerSlotBottom" class="mt-stack-sm">
         <div id="detailCustomerSection"
@@ -1330,11 +1342,24 @@
         <span class="mb-1 block text-sm font-bold">Formas de Pagamento</span>
         <div id="checkoutPaymentMethodsList" class="grid grid-cols-2 gap-2"></div>
       </label>
+      <button id="openSplitBillFromCheckoutButton" type="button"
+        class="mt-stack-sm h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface text-sm font-bold text-primary shadow-sm transition">Acerto
+        entre pessoas</button>
       <button id="confirmCheckoutButton"
         class="mt-stack-sm h-touch-target-min w-full rounded-xl bg-primary text-base font-bold text-on-primary">Finalizar
         Comanda</button>
       <p id="checkoutFeedback" class="mt-2 text-sm text-error"></p>
     </div>
+  </section>
+
+  <section id="acertoDialog" class="app-overlay hidden">
+    <header
+      class="app-shell-header z-40 mt-2 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+      <h3 class="text-lg font-extrabold text-primary">Acerto</h3>
+      <button id="closeAcertoDialogButton"
+        class="ml-2 h-10 shrink-0 rounded-lg border border-outline px-3 text-sm font-bold">Voltar</button>
+    </header>
+    <div id="splitBillBody" class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md"></div>
   </section>
 
   <section id="cashCloseHistoryDialog" class="app-overlay hidden">
