@@ -346,9 +346,14 @@
     }
 
     .app-viewport-fill {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: none;
       height: 100%;
       min-height: 100%;
       max-height: 100%;
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
     }
 
     .login-viewport-min {
@@ -360,23 +365,25 @@
       overscroll-behavior-y: contain;
     }
 
-    /* Telas cheias (comanda, fechamento): altura fixa do layout, scroll interno. */
+    /* Telas cheias (comanda, fechamento): mesma largura do shell principal. */
     .app-overlay {
       position: fixed;
       top: 0;
-      left: 50%;
+      left: 0;
+      right: 0;
       z-index: 50;
       display: flex;
       box-sizing: border-box;
       width: 100%;
-      max-width: 390px;
+      max-width: none;
       height: var(--app-height);
       max-height: var(--app-height);
       flex-direction: column;
       overflow: hidden;
       padding-top: env(safe-area-inset-top, 0px);
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
       background-color: var(--bg-background);
-      transform: translateX(-50%);
     }
 
     .app-overlay-scroll {
@@ -803,7 +810,7 @@
     window.__SUPABASE_ANON_KEY__ = window.__SUPABASE_ANON_KEY__ || "";
   </script>
   <script src="./supabase-config.js"></script>
-  <main class="app-viewport-fill mx-auto w-full max-w-[390px] bg-surface shadow-lg">
+  <main class="app-viewport-fill bg-surface">
     <section id="loginScreen"
       class="login-viewport-min flex flex-col justify-center px-margin-mobile py-stack-md">
       <div class="mb-stack-md flex flex-col items-center gap-stack-sm text-center">
@@ -1199,7 +1206,7 @@
     </section>
   </main>
 
-  <dialog id="orderDialog" class="w-full max-w-[390px] rounded-2xl p-0 backdrop:bg-black/50">
+  <dialog id="orderDialog" class="w-full max-w-none rounded-2xl p-0 backdrop:bg-black/50">
     <div class="p-4">
       <div class="mb-stack-sm flex items-center justify-between">
         <h3 class="text-lg font-extrabold text-primary">Nova Comanda</h3>
@@ -1213,7 +1220,7 @@
     </div>
   </dialog>
 
-  <dialog id="reopenConfirmDialog" class="w-full max-w-[390px] rounded-2xl border-0 p-0 backdrop:bg-black/50">
+  <dialog id="reopenConfirmDialog" class="w-full max-w-none rounded-2xl border-0 p-0 backdrop:bg-black/50">
     <div class="p-4">
       <h3 class="text-lg font-extrabold text-primary">Reabrir comanda</h3>
       <p id="reopenConfirmMessage" class="mt-2 text-sm text-on-surface-variant">Reabrir esta comanda? Ela voltara como
@@ -1227,7 +1234,7 @@
     </div>
   </dialog>
 
-  <dialog id="deleteConfirmDialog" class="w-full max-w-[390px] rounded-2xl border-0 p-0 backdrop:bg-black/50">
+  <dialog id="deleteConfirmDialog" class="w-full max-w-none rounded-2xl border-0 p-0 backdrop:bg-black/50">
     <div class="p-4">
       <h3 id="deleteConfirmTitle" class="text-lg font-extrabold text-error">Excluir</h3>
       <p id="deleteConfirmMessage" class="mt-2 text-sm text-on-surface-variant"></p>
@@ -1241,8 +1248,7 @@
   </dialog>
 
   <section id="detailDialog" class="app-overlay hidden">
-    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile pt-4">
-    <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
+    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md">
       <div class="mb-stack-sm flex items-start justify-between gap-3">
         <div>
           <h3 id="detailTitle" class="text-lg font-extrabold text-primary"></h3>
@@ -1319,12 +1325,10 @@
       <button id="confirmDetailButton"
         class="mt-3 h-touch-target-min w-full rounded-xl bg-primary text-base font-bold text-on-primary shadow-sm transition">Confirmar</button>
     </div>
-    </div>
   </section>
 
   <section id="checkoutDialog" class="app-overlay hidden">
-    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile pt-4">
-    <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
+    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md">
       <div class="mb-stack-sm flex items-center justify-between">
         <h3 class="text-lg font-extrabold text-primary">Fechamento</h3>
         <button id="closeCheckoutDialogButton"
@@ -1346,19 +1350,16 @@
         Comanda</button>
       <p id="checkoutFeedback" class="mt-2 text-sm text-error"></p>
     </div>
-    </div>
   </section>
 
   <section id="cashCloseHistoryDialog" class="app-overlay hidden">
-    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile pt-4">
-    <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
+    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md">
       <div class="mb-stack-sm flex items-center justify-between gap-2">
         <h3 class="text-lg font-extrabold text-primary">Historico de Fechamentos</h3>
         <button id="closeCashCloseHistoryButton"
           class="h-10 rounded-lg border border-outline px-3 text-sm font-bold">Fechar</button>
       </div>
       <div id="cashCloseHistoryBody"></div>
-    </div>
     </div>
   </section>
 
