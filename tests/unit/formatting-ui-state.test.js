@@ -161,8 +161,8 @@ describe("UI render smoke (não lança com refs mockados)", () => {
   const smokeFns = [
     "renderShiftBar",
     "renderDashboard",
-    "renderHeaderSettingsButton",
-    "renderBottomTabs",
+    "renderHeaderNavButtons",
+    "renderMainPanels",
     "renderView",
     "renderProductCategoryOptions",
     "renderSettings",

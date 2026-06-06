@@ -61,9 +61,6 @@ function patchRefs(j) {
     document.body.appendChild(dashPanel);
   }
 
-  const bottomTab = createMockElement();
-  bottomTab.dataset.tab = "dashboardTab";
-  j.refs.bottomTabs = [bottomTab];
   j.refs.tabPanels = [dashPanel];
 
   const settingsTab = createMockElement();

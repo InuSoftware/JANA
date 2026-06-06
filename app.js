@@ -1264,7 +1264,6 @@ const refs = {
   loginScreen: document.querySelector("#loginScreen"),
   appScreen: document.querySelector("#appScreen"),
   appHeader: document.querySelector("#appHeader"),
-  appBottomNav: document.querySelector("#appBottomNav"),
   mainContent: document.querySelector("#mainContent"),
   loginForm: document.querySelector("#loginForm"),
   usernameInput: document.querySelector("#usernameInput"),
@@ -1272,6 +1271,8 @@ const refs = {
   biometricButton: document.querySelector("#biometricButton"),
   loginFeedback: document.querySelector("#loginFeedback"),
   currentUserLabel: document.querySelector("#currentUserLabel"),
+  goHomeButton: document.querySelector("#goHomeButton"),
+  openReportsButton: document.querySelector("#openReportsButton"),
   openSettingsButton: document.querySelector("#openSettingsButton"),
   logoutButton: document.querySelector("#logoutButton"),
   shiftBar: document.querySelector("#shiftBar"),
@@ -1282,8 +1283,6 @@ const refs = {
   ordersList: document.querySelector("#ordersList"),
   statusFilters: [...document.querySelectorAll(".status-filter")],
   newOrderButton: document.querySelector("#newOrderButton"),
-  homeButton: document.querySelector("#homeButton"),
-  bottomTabs: [...document.querySelectorAll(".bottom-tab")],
   tabPanels: [...document.querySelectorAll(".tab-panel")],
   orderDialog: document.querySelector("#orderDialog"),
   closeOrderDialogButton: document.querySelector("#closeOrderDialogButton"),
@@ -2392,32 +2391,49 @@ function renderDashboard() {
   });
 }
 
-function renderHeaderSettingsButton() {
-  if (!refs.openSettingsButton) return;
-  const settingsActive =
-    state.currentView === "main" && state.selectedTab === "settingsTab";
-  refs.openSettingsButton.className = settingsActive
-    ? "header-settings-button header-settings-button--active flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant bg-primary-container text-on-primary-container transition"
-    : "header-settings-button flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface transition";
-  refs.openSettingsButton.setAttribute(
-    "aria-pressed",
-    settingsActive ? "true" : "false",
-  );
+const HEADER_ICON_BTN_BASE =
+  "flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant transition";
+const HEADER_ICON_BTN_ON = `${HEADER_ICON_BTN_BASE} bg-primary-container text-on-primary-container`;
+const HEADER_ICON_BTN_OFF = `${HEADER_ICON_BTN_BASE} text-on-surface`;
+
+function renderHeaderNavButtons() {
+  const onMain = state.currentView === "main";
+  const homeActive = onMain && state.selectedTab === "dashboardTab";
+  const reportsActive = onMain && state.selectedTab === "reportsTab";
+  const settingsActive = onMain && state.selectedTab === "settingsTab";
+
+  if (refs.goHomeButton) {
+    refs.goHomeButton.className = homeActive
+      ? "header-home-button header-home-button--active flex min-w-0 items-center gap-stack-sm rounded-lg border border-outline-variant bg-primary-container px-2 text-left text-on-primary-container transition"
+      : "header-home-button flex min-w-0 items-center gap-stack-sm rounded-lg border border-transparent text-left transition";
+    refs.goHomeButton.setAttribute("aria-pressed", homeActive ? "true" : "false");
+  }
+
+  if (refs.openReportsButton) {
+    refs.openReportsButton.className = reportsActive
+      ? `header-reports-button header-reports-button--active ${HEADER_ICON_BTN_ON}`
+      : `header-reports-button ${HEADER_ICON_BTN_OFF}`;
+    refs.openReportsButton.setAttribute(
+      "aria-pressed",
+      reportsActive ? "true" : "false",
+    );
+  }
+
+  if (refs.openSettingsButton) {
+    refs.openSettingsButton.className = settingsActive
+      ? `header-settings-button header-settings-button--active ${HEADER_ICON_BTN_ON}`
+      : `header-settings-button ${HEADER_ICON_BTN_OFF}`;
+    refs.openSettingsButton.setAttribute(
+      "aria-pressed",
+      settingsActive ? "true" : "false",
+    );
+  }
 }
 
-function renderBottomTabs() {
+function renderMainPanels() {
   refs.tabPanels.forEach((panel) => panel.classList.add("hidden"));
   document.querySelector(`#${state.selectedTab}`)?.classList.remove("hidden");
-
-  refs.bottomTabs.forEach((tab) => {
-    const selected = tab.dataset.tab === state.selectedTab;
-    tab.className = selected
-      ? "bottom-tab bottom-tab--active flex flex-1 items-center justify-center rounded-[0.875rem] bg-primary-container text-on-primary-container transition"
-      : "bottom-tab flex flex-1 items-center justify-center rounded-[0.875rem] text-on-surface-variant transition hover:bg-surface-container-high/60";
-    tab.setAttribute("aria-selected", selected ? "true" : "false");
-  });
-
-  renderHeaderSettingsButton();
+  renderHeaderNavButtons();
 }
 
 function renderView() {
@@ -2427,7 +2443,6 @@ function renderView() {
 
   refs.mainContent.classList.toggle("hidden", !onMain);
   refs.appHeader.classList.toggle("hidden", !onMain);
-  refs.appBottomNav.classList.toggle("hidden", !onMain);
   refs.detailDialog.classList.toggle("hidden", !onDetail);
   refs.checkoutDialog.classList.toggle("hidden", !onCheckout);
   syncOrderItemsTimerInterval();
@@ -3377,7 +3392,7 @@ function renderReports() {
 
 function renderAll() {
   applyTheme();
-  renderBottomTabs();
+  renderMainPanels();
   renderSettings();
   renderView();
   renderDashboard();
@@ -3989,6 +4004,21 @@ function bindEvents() {
     }
   });
 
+  refs.goHomeButton?.addEventListener("click", () => {
+    state.currentView = "main";
+    state.selectedTab = "dashboardTab";
+    state.detailAction = null;
+    state.cancelConfirmOpen = false;
+    if (isPendingLocalOrder()) abandonPendingOrder();
+    renderAll();
+  });
+
+  refs.openReportsButton?.addEventListener("click", () => {
+    state.currentView = "main";
+    state.selectedTab = "reportsTab";
+    renderAll();
+  });
+
   refs.openSettingsButton.addEventListener("click", () => {
     state.currentView = "main";
     state.selectedTab = "settingsTab";
@@ -4031,25 +4061,6 @@ function bindEvents() {
   refs.closeOrderDialogButton.addEventListener("click", () =>
     refs.orderDialog.close(),
   );
-
-  refs.bottomTabs.forEach((button) => {
-    button.addEventListener("click", () => {
-      state.selectedTab = button.dataset.tab || "dashboardTab";
-      if (state.selectedTab === "dashboardTab") {
-        state.currentView = "main";
-        state.detailAction = null;
-        state.cancelConfirmOpen = false;
-        if (isPendingLocalOrder()) abandonPendingOrder();
-      }
-      if (state.selectedTab === "settingsTab") {
-        state.selectedSettingsTab = "products";
-      }
-      if (state.selectedTab === "reportsTab") {
-        state.currentView = "main";
-      }
-      renderAll();
-    });
-  });
 
   document.querySelectorAll(".report-type-button").forEach((btn) => {
     if (btn.dataset.boundReport) return;
@@ -4777,12 +4788,6 @@ function getFieldVisibleBand() {
     );
   }
 
-  const nav = refs.appBottomNav;
-  if (nav && !nav.classList.contains("hidden")) {
-    const navTop = nav.getBoundingClientRect().top;
-    if (navTop > top && navTop < bottom) bottom = navTop - m;
-  }
-
   return { top, bottom };
 }
 
@@ -5060,8 +5065,8 @@ if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
     renderAuth,
     renderShiftBar,
     renderDashboard,
-    renderHeaderSettingsButton,
-    renderBottomTabs,
+    renderMainPanels,
+    renderHeaderNavButtons,
     renderView,
     renderProductCategoryOptions,
     renderSettings,
