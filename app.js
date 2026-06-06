@@ -2404,8 +2404,8 @@ function renderHeaderNavButtons() {
 
   if (refs.goHomeButton) {
     refs.goHomeButton.className = homeActive
-      ? "header-home-button header-home-button--active flex min-w-0 items-center gap-stack-sm rounded-lg border border-outline-variant bg-primary-container px-2 text-left text-on-primary-container transition"
-      : "header-home-button flex min-w-0 items-center gap-stack-sm rounded-lg border border-transparent text-left transition";
+      ? `header-home-button header-home-button--active ${HEADER_ICON_BTN_ON}`
+      : `header-home-button ${HEADER_ICON_BTN_OFF}`;
     refs.goHomeButton.setAttribute("aria-pressed", homeActive ? "true" : "false");
   }
 
@@ -2472,8 +2472,13 @@ function renderSettings() {
     payments: document.querySelector("#paymentsSettingsPanel"),
     reopen: document.querySelector("#reopenSettingsPanel"),
     theme: document.querySelector("#themeSettingsPanel"),
+    logout: document.querySelector("#logoutSettingsPanel"),
   };
   panelMap[state.selectedSettingsTab]?.classList.remove("hidden");
+  refs.confirmSettingsButton?.classList.toggle(
+    "hidden",
+    state.selectedSettingsTab === "logout",
+  );
   refs.settingsTabButtons.forEach((button) => {
     const selected = button.dataset.settingsTab === state.selectedSettingsTab;
     button.className = selected

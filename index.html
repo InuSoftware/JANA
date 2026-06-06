@@ -115,10 +115,6 @@
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     }
 
-    .header-home-button:not(.header-home-button--active) .header-home-icon {
-      color: var(--text-primary);
-    }
-
     .header-home-button .header-home-icon,
     .header-settings-button .header-settings-icon,
     .header-reports-button .header-reports-icon {
@@ -854,28 +850,29 @@
     <section id="appScreen" class="app-shell hidden bg-background">
       <header id="appHeader"
         class="app-shell-header z-40 mt-2 flex items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
-        <button type="button" id="goHomeButton"
-          class="header-home-button flex min-w-0 items-center gap-stack-sm rounded-lg border border-transparent text-left"
-          title="Início" aria-pressed="false">
-          <span class="header-home-icon material-symbols-rounded">restaurant_menu</span>
+        <div class="flex min-w-0 items-center gap-stack-sm">
+          <span class="material-symbols-rounded shrink-0 text-primary" aria-hidden="true">restaurant_menu</span>
           <div class="min-w-0">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Usuario</p>
             <p id="currentUserLabel" class="truncate text-sm font-bold text-primary"></p>
           </div>
-        </button>
+        </div>
         <div class="flex shrink-0 items-center gap-2">
+          <button id="goHomeButton" type="button"
+            class="header-home-button flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface"
+            title="Início" aria-label="Início" aria-pressed="false">
+            <span class="header-home-icon material-symbols-rounded text-[20px]" aria-hidden="true">space_dashboard</span>
+          </button>
           <button id="openReportsButton" type="button"
             class="header-reports-button flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface"
-            title="Relatórios" aria-pressed="false">
+            title="Relatórios" aria-label="Relatórios" aria-pressed="false">
             <span class="header-reports-icon material-symbols-rounded text-[20px]" aria-hidden="true">analytics</span>
           </button>
           <button id="openSettingsButton" type="button"
             class="header-settings-button flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-on-surface"
-            title="Configurações" aria-pressed="false">
+            title="Configurações" aria-label="Configurações" aria-pressed="false">
             <span class="header-settings-icon material-symbols-rounded text-[20px]" aria-hidden="true">settings</span>
           </button>
-          <button id="logoutButton"
-            class="h-11 rounded-lg border border-outline-variant px-4 text-sm font-bold text-on-surface">Sair</button>
         </div>
       </header>
 
@@ -993,6 +990,8 @@
                 class="settings-tab-button h-10 shrink-0 rounded-full bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant">Tema</button>
               <button data-settings-tab="reopen"
                 class="settings-tab-button h-10 shrink-0 rounded-full bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant">Reabrir</button>
+              <button data-settings-tab="logout"
+                class="settings-tab-button h-10 shrink-0 rounded-full bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant">Sair</button>
             </div>
             <div id="settingsTabsRightHint" class="settings-tabs-hint settings-tabs-hint-right">
               <span class="material-symbols-rounded text-[16px] text-on-surface-variant">chevron_right</span>
@@ -1178,6 +1177,14 @@
             <p class="text-sm font-bold text-on-surface">Tema visual</p>
             <p id="activeThemeLabel" class="mt-1 text-xs text-on-surface-variant"></p>
             <div id="themePresetList" class="mt-2 grid grid-cols-2 gap-2"></div>
+          </div>
+          <div id="logoutSettingsPanel"
+            class="settings-panel mt-stack-md hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
+            <p class="text-sm font-bold text-on-surface">Sair da conta</p>
+            <p class="mt-1 text-xs text-on-surface-variant">Encerra sua sessao neste dispositivo. Voce precisara entrar
+              de novo com email e senha.</p>
+            <button id="logoutButton" type="button"
+              class="mt-stack-md h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface-container-low text-base font-bold text-on-surface">Sair</button>
           </div>
           <button id="confirmSettingsButton"
             class="main-bottom-action mt-3 h-touch-target-min w-full rounded-xl bg-primary text-base font-bold text-on-primary shadow-sm transition">Confirmar</button>
