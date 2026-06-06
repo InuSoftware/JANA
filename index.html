@@ -301,11 +301,6 @@
       scroll-padding-bottom: var(--app-scroll-footer-pad);
     }
 
-    /* Comanda finalizada (so visualizacao): mais respiro no topo. */
-    #detailDialog.detail-view--finalized .app-overlay-scroll {
-      padding-top: 3rem;
-    }
-
     .app-viewport-fill {
       box-sizing: border-box;
       width: 100%;
@@ -1236,16 +1231,17 @@
   </dialog>
 
   <section id="detailDialog" class="app-overlay hidden">
-    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md">
-      <div class="mb-stack-sm flex items-start justify-between gap-3">
-        <div>
-          <h3 id="detailTitle" class="text-lg font-extrabold text-primary"></h3>
-          <p id="detailStatus" class="text-xs text-on-surface-variant"></p>
-        </div>
-        <button id="closeDetailDialogButton"
-          class="h-10 rounded-lg border border-outline px-3 text-sm font-bold">Voltar</button>
+    <header
+      class="app-shell-header z-40 mt-2 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+      <div class="min-w-0">
+        <h3 id="detailTitle" class="truncate text-lg font-extrabold text-primary"></h3>
+        <p id="detailStatus" class="text-xs text-on-surface-variant"></p>
       </div>
-      <div id="detailCustomerSlotTop" class="mt-stack-sm"></div>
+      <button id="closeDetailDialogButton"
+        class="ml-2 h-10 shrink-0 rounded-lg border border-outline px-3 text-sm font-bold">Voltar</button>
+    </header>
+    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md">
+      <div id="detailCustomerSlotTop" class="mt-0"></div>
       <div id="orderTableGroup"
         class="mt-stack-sm hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
         <label class="block">
@@ -1316,12 +1312,13 @@
   </section>
 
   <section id="checkoutDialog" class="app-overlay hidden">
+    <header
+      class="app-shell-header z-40 mt-2 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+      <h3 class="text-lg font-extrabold text-primary">Fechamento</h3>
+      <button id="closeCheckoutDialogButton"
+        class="ml-2 h-10 shrink-0 rounded-lg border border-outline px-3 text-sm font-bold">Voltar</button>
+    </header>
     <div class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md">
-      <div class="mb-stack-sm flex items-center justify-between">
-        <h3 class="text-lg font-extrabold text-primary">Fechamento</h3>
-        <button id="closeCheckoutDialogButton"
-          class="h-10 rounded-lg border border-outline px-3 text-sm font-bold">Voltar</button>
-      </div>
       <div id="checkoutSummary"
         class="space-y-2 rounded-xl border border-outline-variant bg-surface-container-lowest p-3"></div>
       <label id="serviceFeeField" class="mt-stack-sm block">
@@ -1341,12 +1338,13 @@
   </section>
 
   <section id="cashCloseHistoryDialog" class="app-overlay hidden">
+    <header
+      class="app-shell-header z-40 mt-2 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+      <h3 class="min-w-0 truncate text-lg font-extrabold text-primary">Historico de Fechamentos</h3>
+      <button id="closeCashCloseHistoryButton"
+        class="ml-2 h-10 shrink-0 rounded-lg border border-outline px-3 text-sm font-bold">Fechar</button>
+    </header>
     <div class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md">
-      <div class="mb-stack-sm flex items-center justify-between gap-2">
-        <h3 class="text-lg font-extrabold text-primary">Historico de Fechamentos</h3>
-        <button id="closeCashCloseHistoryButton"
-          class="h-10 rounded-lg border border-outline px-3 text-sm font-bold">Fechar</button>
-      </div>
       <div id="cashCloseHistoryBody"></div>
     </div>
   </section>

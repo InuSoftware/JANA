@@ -2935,10 +2935,6 @@ function renderOrderDetails() {
   const launchMode = state.detailAction === "add";
   const status = normalizeOrderStatus(order.status);
   const isLocked = status === "Finalizado" || status === "Cancelada";
-  refs.detailDialog.classList.toggle(
-    "detail-view--finalized",
-    status === "Finalizado",
-  );
   if (refs.detailCustomerHint) {
     if (isLocked) {
       refs.detailCustomerHint.textContent =
