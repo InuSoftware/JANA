@@ -1407,6 +1407,11 @@ const refs = {
   reopenConfirmDismissButton: document.querySelector(
     "#reopenConfirmDismissButton",
   ),
+  deleteConfirmDialog: document.querySelector("#deleteConfirmDialog"),
+  deleteConfirmTitle: document.querySelector("#deleteConfirmTitle"),
+  deleteConfirmMessage: document.querySelector("#deleteConfirmMessage"),
+  deleteConfirmAcceptButton: document.querySelector("#deleteConfirmAcceptButton"),
+  deleteConfirmDismissButton: document.querySelector("#deleteConfirmDismissButton"),
   reopenShiftSummary: document.querySelector("#reopenShiftSummary"),
   reopenShiftUndoButton: document.querySelector("#reopenShiftUndoButton"),
   reopenShiftFeedback: document.querySelector("#reopenShiftFeedback"),
@@ -2088,6 +2093,29 @@ function openReopenConfirmDialog(orderId) {
   refs.reopenConfirmDialog.showModal();
 }
 
+let deleteConfirmResolver = null;
+
+function resolveDeleteConfirm(ok) {
+  refs.deleteConfirmDialog?.close();
+  if (!deleteConfirmResolver) return;
+  deleteConfirmResolver(!!ok);
+  deleteConfirmResolver = null;
+}
+
+/** Confirma exclusao antes de acoes destrutivas (categorias, produtos, etc.). */
+function confirmDeleteAction({ title = "Excluir", message } = {}) {
+  const text = String(message || "Tem certeza que deseja excluir?");
+  if (!refs.deleteConfirmDialog || typeof refs.deleteConfirmDialog.showModal !== "function") {
+    return Promise.resolve(window.confirm(text));
+  }
+  return new Promise((resolve) => {
+    deleteConfirmResolver = resolve;
+    if (refs.deleteConfirmTitle) refs.deleteConfirmTitle.textContent = title;
+    if (refs.deleteConfirmMessage) refs.deleteConfirmMessage.textContent = text;
+    refs.deleteConfirmDialog.showModal();
+  });
+}
+
 function setReopenShiftFeedback(type, text) {
   if (!refs.reopenShiftFeedback) return;
   refs.reopenShiftFeedback.textContent = text || "";
@@ -2463,9 +2491,14 @@ function renderSettings() {
     .join("");
 
   document.querySelectorAll(".delete-category-button").forEach((button) => {
-    button.addEventListener("click", () =>
-      deleteCategory(button.dataset.category),
-    );
+    button.addEventListener("click", () => {
+      const category = button.dataset.category;
+      void confirmDeleteAction({
+        message: `Tem certeza que deseja excluir a categoria "${category}"?`,
+      }).then((ok) => {
+        if (ok) deleteCategory(category);
+      });
+    });
   });
 
   refs.paymentMethodsSettingsList.innerHTML = (
@@ -2500,9 +2533,17 @@ function renderSettings() {
   document
     .querySelectorAll(".delete-payment-method-button")
     .forEach((button) => {
-      button.addEventListener("click", () =>
-        deletePaymentMethod(button.dataset.methodId),
-      );
+      button.addEventListener("click", () => {
+        const methodId = button.dataset.methodId;
+        const method = (state.config.paymentMethods || []).find(
+          (entry) => entry.id === methodId,
+        );
+        void confirmDeleteAction({
+          message: `Tem certeza que deseja excluir a forma de pagamento "${method?.name || "esta forma"}"?`,
+        }).then((ok) => {
+          if (ok) deletePaymentMethod(methodId);
+        });
+      });
     });
 
   refs.activeThemeLabel.textContent = `Tema ativo: ${THEME_PRESETS[state.config.activeTheme]?.label || "Blue Service"}`;
@@ -2622,9 +2663,17 @@ function renderProductAdmin() {
   });
 
   document.querySelectorAll(".product-delete-button").forEach((button) => {
-    button.addEventListener("click", () =>
-      deleteProduct(button.dataset.productId),
-    );
+    button.addEventListener("click", () => {
+      const productId = button.dataset.productId;
+      const product = loadProducts().find(
+        (entry) => String(entry.id) === String(productId),
+      );
+      void confirmDeleteAction({
+        message: `Tem certeza que deseja excluir o produto "${product?.name || "este produto"}"?`,
+      }).then((ok) => {
+        if (ok) deleteProduct(productId);
+      });
+    });
   });
 
   syncStockControlDependentUi();
@@ -4525,6 +4574,17 @@ function bindEvents() {
     })();
   });
 
+  refs.deleteConfirmDismissButton?.addEventListener("click", () => {
+    resolveDeleteConfirm(false);
+  });
+  refs.deleteConfirmAcceptButton?.addEventListener("click", () => {
+    resolveDeleteConfirm(true);
+  });
+  refs.deleteConfirmDialog?.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    resolveDeleteConfirm(false);
+  });
+
   refs.reopenConfirmDismissButton?.addEventListener("click", () => {
     refs.reopenConfirmDialog?.close();
   });
@@ -4983,6 +5043,8 @@ if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
     recordOrderReopenAudit,
     performReopenOrder,
     openReopenConfirmDialog,
+    confirmDeleteAction,
+    resolveDeleteConfirm,
     setReopenShiftFeedback,
     renderReopenShiftPanel,
     renderReopenPanel,

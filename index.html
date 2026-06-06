@@ -197,19 +197,33 @@
       background-color: var(--bg-background);
     }
 
-    /* iOS / atalho: innerHeight em px deixa faixa morta abaixo do rodape (area vermelha no print). */
-    html.is-ios {
+    /* iOS Safari (aba): 100dvh acompanha a barra de URL. */
+    html.is-ios:not(.is-standalone) {
       --app-height: 100dvh;
       height: 100dvh;
       min-height: 100dvh;
     }
 
-    html.is-ios body,
-    html.is-ios main.app-viewport-fill,
-    html.is-ios .app-shell {
+    html.is-ios:not(.is-standalone) body,
+    html.is-ios:not(.is-standalone) main.app-viewport-fill,
+    html.is-ios:not(.is-standalone) .app-shell {
       height: 100dvh;
       min-height: 100dvh;
       max-height: 100dvh;
+    }
+
+    /* Atalho na Home: 100dvh fica curto — faixa branca abaixo da nav (print). Altura vem do JS (--app-height em px / 100lvh). */
+    html.is-ios.is-standalone {
+      --app-height: 100lvh;
+      background-color: var(--bg-surface);
+    }
+
+    html.is-ios.is-standalone body,
+    html.is-ios.is-standalone main.app-viewport-fill,
+    html.is-ios.is-standalone .app-shell {
+      height: var(--app-height);
+      min-height: var(--app-height);
+      max-height: var(--app-height);
     }
 
     body {
@@ -323,9 +337,12 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
-      /* Barra de abas fica no flex abaixo — so folga leve no fim da rolagem. */
-      padding-bottom: 0.5rem;
-      scroll-padding-bottom: 0.75rem;
+    }
+
+    /* Folga no fim da rolagem (comanda, config, inicio, relatorios). */
+    .app-scroll-footer {
+      padding-bottom: var(--app-scroll-footer-pad);
+      scroll-padding-bottom: var(--app-scroll-footer-pad);
     }
 
     .app-viewport-fill {
@@ -350,12 +367,14 @@
       left: 50%;
       z-index: 50;
       display: flex;
+      box-sizing: border-box;
       width: 100%;
       max-width: 390px;
       height: var(--app-height);
       max-height: var(--app-height);
       flex-direction: column;
       overflow: hidden;
+      padding-top: env(safe-area-inset-top, 0px);
       background-color: var(--bg-background);
       transform: translateX(-50%);
     }
@@ -366,6 +385,7 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
+      scroll-padding-top: 1rem;
     }
 
     /* Rodape no fluxo do shell (nao fixed): nao cobre Confirmar; encosta no fundo no iOS/PWA. */
@@ -404,6 +424,7 @@
       --app-height: 100dvh;
       --app-nav-row: 3.25rem;
       --app-nav-block: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+      --app-scroll-footer-pad: 6rem;
       --bg-background: #fbf9fc;
       --bg-surface: #fbf9fc;
       --bg-surface-lowest: #ffffff;
@@ -737,6 +758,19 @@
         document.documentElement.classList.toggle("is-ios", ios);
         document.documentElement.classList.toggle("is-standalone", standalone);
 
+        if (ios && standalone && !isKeyboardOpen()) {
+          var vv = window.visualViewport;
+          var h = Math.round(
+            Math.max(
+              window.innerHeight,
+              vv ? vv.height + vv.offsetTop : 0,
+              document.documentElement.clientHeight || 0,
+            ),
+          );
+          document.documentElement.style.setProperty("--app-height", h + "px");
+          return;
+        }
+
         if (ios && !isKeyboardOpen()) {
           document.documentElement.style.setProperty("--app-height", "100dvh");
           return;
@@ -837,7 +871,7 @@
         </div>
       </header>
 
-      <div id="mainContent" class="app-shell-main px-margin-mobile py-stack-md">
+      <div id="mainContent" class="app-shell-main app-scroll-footer px-margin-mobile py-stack-md">
         <section id="dashboardTab" class="tab-panel">
           <div id="shiftBar" class="mb-stack-md"></div>
           <button type="button" id="openShiftButton"
@@ -1193,8 +1227,21 @@
     </div>
   </dialog>
 
+  <dialog id="deleteConfirmDialog" class="w-full max-w-[390px] rounded-2xl border-0 p-0 backdrop:bg-black/50">
+    <div class="p-4">
+      <h3 id="deleteConfirmTitle" class="text-lg font-extrabold text-error">Excluir</h3>
+      <p id="deleteConfirmMessage" class="mt-2 text-sm text-on-surface-variant"></p>
+      <div class="mt-stack-sm grid grid-cols-2 gap-2">
+        <button type="button" id="deleteConfirmDismissButton"
+          class="h-touch-target-min rounded-xl border border-outline text-sm font-bold text-on-surface">Nao</button>
+        <button type="button" id="deleteConfirmAcceptButton"
+          class="h-touch-target-min rounded-xl bg-error text-sm font-bold text-on-error">Sim, excluir</button>
+      </div>
+    </div>
+  </dialog>
+
   <section id="detailDialog" class="app-overlay hidden">
-    <div class="app-overlay-scroll px-margin-mobile pb-24 pt-4">
+    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile pt-4">
     <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
       <div class="mb-stack-sm flex items-start justify-between gap-3">
         <div>
@@ -1276,7 +1323,7 @@
   </section>
 
   <section id="checkoutDialog" class="app-overlay hidden">
-    <div class="app-overlay-scroll px-margin-mobile pb-24 pt-4">
+    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile pt-4">
     <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
       <div class="mb-stack-sm flex items-center justify-between">
         <h3 class="text-lg font-extrabold text-primary">Fechamento</h3>
@@ -1303,7 +1350,7 @@
   </section>
 
   <section id="cashCloseHistoryDialog" class="app-overlay hidden">
-    <div class="app-overlay-scroll px-margin-mobile pb-24 pt-4">
+    <div class="app-overlay-scroll app-scroll-footer px-margin-mobile pt-4">
     <div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
       <div class="mb-stack-sm flex items-center justify-between gap-2">
         <h3 class="text-lg font-extrabold text-primary">Historico de Fechamentos</h3>
