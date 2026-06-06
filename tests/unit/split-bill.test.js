@@ -61,4 +61,21 @@ describe("split bill (acerto)", () => {
     const next = j.resizeSplitBillAssignments(assignments, items, 2);
     expect(next[0]).toEqual([2, 1]);
   });
+
+  it("renderCheckoutSplitBillSummary mostra totais confirmados", () => {
+    const order = {
+      id: "o1",
+      items: [{ name: "Cerveja", price: 10, qty: 2 }],
+    };
+    j.state.splitBillConfirmed = {
+      orderId: "o1",
+      personCount: 2,
+      assignments: [[1, 1]],
+    };
+    const html = j.renderCheckoutSplitBillSummary(order, 0);
+    expect(html).toContain("Acerto entre pessoas");
+    expect(html).toContain("Pessoa 1");
+    expect(html).toContain("Pessoa 2");
+    expect(html).toContain("R$");
+  });
 });

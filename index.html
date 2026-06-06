@@ -1342,6 +1342,9 @@
         <span class="mb-1 block text-sm font-bold">Formas de Pagamento</span>
         <div id="checkoutPaymentMethodsList" class="grid grid-cols-2 gap-2"></div>
       </label>
+      <button id="openMergeOrdersButton" type="button"
+        class="mt-stack-sm h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface text-sm font-bold text-primary shadow-sm transition">Juntar
+        comandas</button>
       <button id="openSplitBillFromCheckoutButton" type="button"
         class="mt-stack-sm h-touch-target-min w-full rounded-xl border border-outline-variant bg-surface text-sm font-bold text-primary shadow-sm transition">Acerto
         entre pessoas</button>
@@ -1352,6 +1355,16 @@
     </div>
   </section>
 
+  <section id="mergeOrdersDialog" class="app-overlay hidden">
+    <header
+      class="app-shell-header z-40 mt-2 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+      <h3 class="text-lg font-extrabold text-primary">Juntar comandas</h3>
+      <button id="closeMergeOrdersDialogButton"
+        class="ml-2 h-10 shrink-0 rounded-lg border border-outline px-3 text-sm font-bold">Voltar</button>
+    </header>
+    <div id="mergeOrdersBody" class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md"></div>
+  </section>
+
   <section id="acertoDialog" class="app-overlay hidden">
     <header
       class="app-shell-header z-40 mt-2 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
@@ -1359,7 +1372,15 @@
       <button id="closeAcertoDialogButton"
         class="ml-2 h-10 shrink-0 rounded-lg border border-outline px-3 text-sm font-bold">Voltar</button>
     </header>
-    <div id="splitBillBody" class="app-overlay-scroll app-scroll-footer px-margin-mobile py-stack-md"></div>
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div id="splitBillBody" class="app-overlay-scroll flex-1 px-margin-mobile py-stack-md"></div>
+      <div class="shrink-0 border-t border-outline-variant bg-surface px-margin-mobile py-stack-sm">
+        <p id="splitBillFeedback" class="min-h-[1rem] text-sm text-error"></p>
+        <button id="confirmSplitBillButton" type="button"
+          class="h-touch-target-min w-full rounded-xl bg-primary text-base font-bold text-on-primary shadow-sm transition">Confirmar
+          acerto</button>
+      </div>
+    </div>
   </section>
 
   <section id="cashCloseHistoryDialog" class="app-overlay hidden">

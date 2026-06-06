@@ -1203,6 +1203,8 @@ const state = {
   splitBillReturnView: "detail",
   splitBillPersonCount: 2,
   splitBillAssignments: [],
+  splitBillConfirmed: null,
+  mergedOrderIds: [],
   config: {
     id: 1,
     useTables: false,
@@ -1338,6 +1340,14 @@ const refs = {
   acertoDialog: document.querySelector("#acertoDialog"),
   closeAcertoDialogButton: document.querySelector("#closeAcertoDialogButton"),
   splitBillBody: document.querySelector("#splitBillBody"),
+  splitBillFeedback: document.querySelector("#splitBillFeedback"),
+  confirmSplitBillButton: document.querySelector("#confirmSplitBillButton"),
+  openMergeOrdersButton: document.querySelector("#openMergeOrdersButton"),
+  mergeOrdersDialog: document.querySelector("#mergeOrdersDialog"),
+  closeMergeOrdersDialogButton: document.querySelector(
+    "#closeMergeOrdersDialogButton",
+  ),
+  mergeOrdersBody: document.querySelector("#mergeOrdersBody"),
   cashCloseHistoryDialog: document.querySelector("#cashCloseHistoryDialog"),
   closeCashCloseHistoryButton: document.querySelector(
     "#closeCashCloseHistoryButton",
@@ -1738,6 +1748,118 @@ function calculateOrderSubtotal(order) {
   return items.reduce((sum, item) => sum + item.price * item.qty, 0);
 }
 
+function clearMergedOrders() {
+  state.mergedOrderIds = [];
+}
+
+function getMergedOrders() {
+  const ids = new Set((state.mergedOrderIds || []).map(String));
+  if (!ids.size) return [];
+  return loadOrders().filter(
+    (order) =>
+      ids.has(String(order.id)) &&
+      normalizeOrderStatus(order.status) === "Aberta",
+  );
+}
+
+function getMergeableOpenOrders() {
+  const primaryId = String(state.selectedOrderId || "");
+  const merged = new Set((state.mergedOrderIds || []).map(String));
+  return getOpenOrders().filter((order) => {
+    const id = String(order.id);
+    return (
+      id !== primaryId &&
+      !merged.has(id) &&
+      Array.isArray(order.items) &&
+      order.items.length > 0
+    );
+  });
+}
+
+function getCheckoutCombinedItems() {
+  const primary = getCurrentOrder();
+  if (!primary) return [];
+  const combined = (primary.items || []).map((item) => ({ ...item }));
+  for (const merged of getMergedOrders()) {
+    for (const item of merged.items || []) {
+      combined.push({ ...item });
+    }
+  }
+  return combined;
+}
+
+function calculateCheckoutSubtotal() {
+  return getCheckoutCombinedItems().reduce(
+    (sum, item) => sum + item.price * item.qty,
+    0,
+  );
+}
+
+function usesCheckoutCombinedItemsForSplitBill() {
+  return (
+    (state.mergedOrderIds?.length || 0) > 0 &&
+    (state.currentView === "checkout" ||
+      state.currentView === "acerto" ||
+      state.splitBillReturnView === "checkout")
+  );
+}
+
+function getSplitBillItemsSource() {
+  if (usesCheckoutCombinedItemsForSplitBill()) {
+    return getCheckoutCombinedItems();
+  }
+  const order = getCurrentOrder();
+  return order?.items || [];
+}
+
+function mergeItemsIntoOrder(targetOrder, sourceOrder) {
+  if (!targetOrder || !sourceOrder?.items?.length) return;
+  if (!Array.isArray(targetOrder.items)) targetOrder.items = [];
+  ensureLineIds(targetOrder);
+  ensureLineIds(sourceOrder);
+  for (const item of sourceOrder.items) {
+    const existing = findMergeTargetLineForProduct(
+      targetOrder.items,
+      item.productId,
+    );
+    if (existing) {
+      existing.qty += item.qty;
+    } else {
+      targetOrder.items.push({
+        ...item,
+        lineId: crypto.randomUUID(),
+      });
+    }
+  }
+  targetOrder.everHadItems = true;
+  targetOrder.status = deriveOrderStatus(targetOrder);
+}
+
+function addMergedOrderId(orderId) {
+  const id = String(orderId);
+  const primaryId = String(state.selectedOrderId || "");
+  if (!id || id === primaryId) return false;
+  if ((state.mergedOrderIds || []).some((entry) => String(entry) === id)) {
+    return false;
+  }
+  const order = loadOrders().find((entry) => String(entry.id) === id);
+  if (!order || normalizeOrderStatus(order.status) !== "Aberta") return false;
+  if (!order.items?.length) return false;
+  state.mergedOrderIds = [...(state.mergedOrderIds || []), id];
+  state.splitBillConfirmed = null;
+  state.splitBillAssignments = [];
+  return true;
+}
+
+function removeMergedOrderId(orderId) {
+  const id = String(orderId);
+  state.mergedOrderIds = (state.mergedOrderIds || []).filter(
+    (entry) => String(entry) !== id,
+  );
+  state.splitBillConfirmed = null;
+  state.splitBillAssignments = [];
+}
+
 const SPLIT_BILL_MIN_PEOPLE = 2;
 const SPLIT_BILL_MAX_PEOPLE = 10;
 
@@ -1832,18 +1954,82 @@ function getSplitBillServiceFeePercent(order) {
   return Number(order?.serviceFeePercent) || 10;
 }
 
+function buildSplitBillConfirmedSnapshot(order) {
+  if (!order) return null;
+  return {
+    orderId: String(order.id),
+    personCount: clampSplitBillPersonCount(state.splitBillPersonCount),
+    assignments: (state.splitBillAssignments || []).map((row) => [...row]),
+  };
+}
+
+function getSplitBillConfirmedForOrder(order) {
+  const confirmed = state.splitBillConfirmed;
+  if (!confirmed || !order) return null;
+  if (String(confirmed.orderId) !== String(order.id)) return null;
+  return confirmed;
+}
+
+function prepareCheckoutForCurrentOrder() {
+  const order = getCurrentOrder();
+  if (!order) return false;
+  refs.checkoutFeedback.textContent = "";
+  refs.serviceFeeInput.value = String(
+    state.config.useServiceFee ? order.serviceFeePercent || 10 : 0,
+  );
+  renderCheckoutPaymentMethods();
+  document.querySelectorAll(".payment-method").forEach((checkbox) => {
+    checkbox.checked = order.paymentMethods?.includes(checkbox.value) || false;
+  });
+  state.detailAction = null;
+  return true;
+}
+
 function openSplitBillDialog(fromView) {
   const order = getCurrentOrder();
-  if (!order?.items?.length) return;
+  const items = getSplitBillItemsSource();
+  if (!order || !items.length) return;
   state.splitBillReturnView = fromView || state.currentView;
-  state.splitBillPersonCount = SPLIT_BILL_MIN_PEOPLE;
-  state.splitBillAssignments = initSplitBillAssignments(
-    order.items,
-    state.splitBillPersonCount,
-  );
+  refs.splitBillFeedback.textContent = "";
+  const confirmed = getSplitBillConfirmedForOrder(order);
+  if (confirmed && confirmed.itemCount === items.length) {
+    state.splitBillPersonCount = confirmed.personCount;
+    state.splitBillAssignments = confirmed.assignments.map((row) => [...row]);
+  } else {
+    state.splitBillPersonCount = SPLIT_BILL_MIN_PEOPLE;
+    state.splitBillAssignments = initSplitBillAssignments(
+      items,
+      state.splitBillPersonCount,
+    );
+  }
   state.currentView = "acerto";
   renderSplitBill();
   renderView();
+}
+
+async function confirmSplitBillDialog() {
+  if (!(await ensureOpenShiftAuto())) return;
+  const order = getCurrentOrder();
+  const items = getSplitBillItemsSource();
+  if (!order || !items.length) return;
+
+  const customerName = (order.customer || "").trim();
+  if (!customerName) {
+    refs.splitBillFeedback.textContent =
+      "Informe o nome do cliente na comanda antes de confirmar o acerto.";
+    return;
+  }
+
+  refs.splitBillFeedback.textContent = "";
+  state.splitBillConfirmed = {
+    ...buildSplitBillConfirmedSnapshot(order),
+    itemCount: items.length,
+  };
+  if (!prepareCheckoutForCurrentOrder()) return;
+  state.currentView = "checkout";
+  renderView();
+  renderCheckoutSummary();
+  renderOrderDetails();
 }
 
 function closeSplitBillDialog() {
@@ -1862,13 +2048,12 @@ function closeSplitBillDialog() {
 function renderSplitBill() {
   if (!refs.splitBillBody) return;
   const order = getCurrentOrder();
-  if (!order?.items?.length) {
+  const items = getSplitBillItemsSource();
+  if (!order || !items.length) {
     refs.splitBillBody.innerHTML =
       "<p class='text-sm text-on-surface-variant'>Nenhum item na comanda.</p>";
     return;
   }
-
-  const items = order.items;
   const personCount = clampSplitBillPersonCount(state.splitBillPersonCount);
   state.splitBillPersonCount = personCount;
   if (!state.splitBillAssignments?.length) {
@@ -1982,7 +2167,8 @@ function bindSplitBillInteractionsOnce() {
   refs.splitBillBody.dataset.bound = "1";
   refs.splitBillBody.addEventListener("click", (event) => {
     const order = getCurrentOrder();
-    if (!order?.items?.length) return;
+    const items = getSplitBillItemsSource();
+    if (!order || !items.length) return;
 
     const personBtn = event.target.closest(".split-bill-person-btn");
     if (personBtn && !personBtn.disabled) {
@@ -1992,7 +2178,7 @@ function bindSplitBillInteractionsOnce() {
       );
       state.splitBillAssignments = resizeSplitBillAssignments(
         state.splitBillAssignments,
-        order.items,
+        items,
         state.splitBillPersonCount,
       );
       renderSplitBill();
@@ -2004,7 +2190,7 @@ function bindSplitBillInteractionsOnce() {
     const itemIndex = Number(qtyBtn.dataset.itemIndex);
     const personIndex = Number(qtyBtn.dataset.personIndex);
     const delta = Number(qtyBtn.dataset.delta) || 0;
-    const itemQty = order.items[itemIndex]?.qty || 0;
+    const itemQty = items[itemIndex]?.qty || 0;
     state.splitBillAssignments = adjustSplitBillQty(
       state.splitBillAssignments,
       itemIndex,
@@ -2731,12 +2917,14 @@ function renderView() {
   const onDetail = state.currentView === "detail";
   const onCheckout = state.currentView === "checkout";
   const onAcerto = state.currentView === "acerto";
+  const onMergeOrders = state.currentView === "mergeOrders";
 
   refs.mainContent.classList.toggle("hidden", !onMain);
   refs.appHeader.classList.toggle("hidden", !onMain);
   refs.detailDialog.classList.toggle("hidden", !onDetail);
   refs.checkoutDialog.classList.toggle("hidden", !onCheckout);
   refs.acertoDialog?.classList.toggle("hidden", !onAcerto);
+  refs.mergeOrdersDialog?.classList.toggle("hidden", !onMergeOrders);
   syncOrderItemsTimerInterval();
 }
 
@@ -3395,21 +3583,204 @@ function renderOrderDetails() {
   syncOrderItemsTimerInterval();
 }
 
+function renderCheckoutSplitBillSummary(order, feePercent) {
+  const confirmed = getSplitBillConfirmedForOrder(order);
+  if (!confirmed) return "";
+
+  const items = getCheckoutCombinedItems();
+  if (confirmed.itemCount != null && confirmed.itemCount !== items.length) {
+    return "";
+  }
+  const result = computeSplitBillResult(
+    items,
+    confirmed.assignments,
+    confirmed.personCount,
+    feePercent,
+  );
+
+  const peopleHtml = Array.from(
+    { length: confirmed.personCount },
+    (_, personIndex) => {
+      const subtotal = result.personSubtotals[personIndex] || 0;
+      const personTotal = result.personTotals[personIndex] || 0;
+      const feeLine =
+        feePercent > 0
+          ? `<p class="text-[11px] text-on-surface-variant">Subtotal ${formatCurrency(subtotal)} + taxa ${feePercent.toFixed(1)}%</p>`
+          : "";
+      return `
+        <div class="flex items-start justify-between gap-2 rounded-lg bg-surface-container-low px-2 py-2">
+          <div>
+            <p class="text-sm font-semibold text-on-surface">Pessoa ${personIndex + 1}</p>
+            ${feeLine}
+          </div>
+          <p class="text-base font-extrabold text-primary">${formatCurrency(personTotal)}</p>
+        </div>`;
+    },
+  ).join("");
+
+  return `
+    <div class="mt-3 border-t border-outline-variant pt-3">
+      <p class="text-xs font-bold uppercase text-on-surface-variant">Acerto entre pessoas</p>
+      <div class="mt-2 space-y-2">${peopleHtml}</div>
+      ${
+        result.unassignedSubtotal > 0
+          ? `<p class="mt-2 text-xs font-semibold text-error">Sem atribuir: ${formatCurrency(result.unassignedTotal)}</p>`
+          : ""
+      }
+    </div>`;
+}
+
+function renderCheckoutMergedOrdersSummary() {
+  const primary = getCurrentOrder();
+  const merged = getMergedOrders();
+  if (!primary || !merged.length) return "";
+
+  const mergedRows = merged
+    .map(
+      (order) => `
+        <div class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-low px-2 py-2">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-on-surface">${order.customer?.trim() || "Cliente sem nome"}</p>
+            <p class="text-[11px] text-on-surface-variant">${formatOrderSubline(order)}</p>
+          </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <p class="text-sm font-bold text-primary">${formatCurrency(calculateOrderSubtotal(order))}</p>
+            <button type="button" class="remove-merged-order-btn text-[11px] font-semibold text-error underline decoration-error/40 underline-offset-2" data-order-id="${order.id}">Remover</button>
+          </div>
+        </div>`,
+    )
+    .join("");
+
+  return `
+    <div class="mt-3 border-t border-outline-variant pt-3">
+      <p class="text-xs font-bold uppercase text-on-surface-variant">Comandas juntas</p>
+      <p class="mt-1 flex justify-between text-sm">
+        <span>${primary.customer?.trim() || "Cliente sem nome"} (principal)</span>
+        <span class="font-semibold">${formatCurrency(calculateOrderSubtotal(primary))}</span>
+      </p>
+      <div class="mt-2 space-y-2">${mergedRows}</div>
+    </div>`;
+}
+
 function renderCheckoutSummary() {
   const order = getCurrentOrder();
   if (!order) return;
-  const subtotal = calculateOrderSubtotal(order);
+  const subtotal = calculateCheckoutSubtotal();
   const feePercent = state.config.useServiceFee
     ? Number(refs.serviceFeeInput.value) || 0
     : 0;
   const feeValue = subtotal * (feePercent / 100);
   const total = subtotal + feeValue;
+  const mergedHtml = renderCheckoutMergedOrdersSummary();
+  const splitHtml = renderCheckoutSplitBillSummary(order, feePercent);
 
   refs.checkoutSummary.innerHTML = `
     <p class="flex justify-between text-sm"><span>Subtotal</span><span class="font-semibold">${formatCurrency(subtotal)}</span></p>
     <p class="flex justify-between text-sm"><span>Taxa (${feePercent.toFixed(1)}%)</span><span class="font-semibold">${formatCurrency(feeValue)}</span></p>
     <p class="checkout-total-divider flex justify-between border-t pt-2 text-base font-bold text-on-surface"><span>Total</span><span>${formatCurrency(total)}</span></p>
+    ${mergedHtml}
+    ${splitHtml}
   `;
+}
+
+function openMergeOrdersDialog() {
+  state.currentView = "mergeOrders";
+  renderMergeOrdersPicker();
+  renderView();
+}
+
+function closeMergeOrdersDialog() {
+  state.currentView = "checkout";
+  renderCheckoutSummary();
+  renderView();
+}
+
+function renderMergeOrdersPicker() {
+  if (!refs.mergeOrdersBody) return;
+  const primary = getCurrentOrder();
+  const mergeable = getMergeableOpenOrders();
+  const merged = getMergedOrders();
+
+  const mergedHtml = merged.length
+    ? `<div class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+        <p class="text-xs font-bold uppercase text-on-surface-variant">Ja juntadas</p>
+        <ul class="mt-2 space-y-2">
+          ${merged
+            .map(
+              (order) => `
+            <li class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-low px-2 py-2">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-on-surface">${order.customer?.trim() || "Cliente sem nome"}</p>
+                <p class="text-[11px] text-on-surface-variant">${formatOrderSubline(order)}</p>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <p class="text-sm font-bold text-primary">${formatCurrency(calculateOrderSubtotal(order))}</p>
+                <button type="button" class="remove-merged-order-btn text-[11px] font-semibold text-error underline decoration-error/40 underline-offset-2" data-order-id="${order.id}">Remover</button>
+              </div>
+            </li>`,
+            )
+            .join("")}
+        </ul>
+      </div>`
+    : "";
+
+  const mergeableHtml = mergeable.length
+    ? `<ul class="mt-2 space-y-2">
+        ${mergeable
+          .map(
+            (order) => `
+          <li class="rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-on-surface">${order.customer?.trim() || "Cliente sem nome"}</p>
+                <p class="text-xs text-on-surface-variant">${formatOrderSubline(order)}</p>
+              </div>
+              <p class="shrink-0 text-sm font-bold text-primary">${formatCurrency(calculateOrderSubtotal(order))}</p>
+            </div>
+            <button type="button" class="add-merged-order-btn mt-2 h-10 w-full rounded-lg bg-primary text-sm font-semibold text-on-primary" data-order-id="${order.id}">Juntar nesta finalizacao</button>
+          </li>`,
+          )
+          .join("")}
+      </ul>`
+    : `<p class="mt-2 rounded-xl border border-outline-variant bg-surface-container-high p-3 text-sm text-on-surface-variant">Nenhuma outra comanda aberta com itens para juntar.</p>`;
+
+  refs.mergeOrdersBody.innerHTML = `
+    <p class="text-sm text-on-surface-variant">Selecione comandas abertas para somar os itens neste fechamento. Ao finalizar, tudo sera unificado na comanda principal <span class="font-semibold text-on-surface">${primary?.customer?.trim() || "Cliente sem nome"}</span>.</p>
+    ${mergedHtml ? `<div class="mt-stack-sm">${mergedHtml}</div>` : ""}
+    <div class="mt-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+      <h4 class="text-sm font-bold text-on-surface">Comandas disponiveis</h4>
+      ${mergeableHtml}
+    </div>
+    <p class="mt-stack-sm text-right text-base font-extrabold text-primary">Total combinado: ${formatCurrency(calculateCheckoutSubtotal())}</p>`;
+}
+
+function bindMergeOrdersInteractionsOnce() {
+  if (refs.mergeOrdersBody?.dataset.mergeBound === "1") return;
+  if (refs.mergeOrdersBody) refs.mergeOrdersBody.dataset.mergeBound = "1";
+
+  const handleClick = (event) => {
+    const addBtn = event.target.closest(".add-merged-order-btn");
+    if (addBtn) {
+      if (addMergedOrderId(addBtn.dataset.orderId)) {
+        if (state.currentView === "mergeOrders") {
+          renderMergeOrdersPicker();
+        }
+        renderCheckoutSummary();
+      }
+      return;
+    }
+
+    const removeBtn = event.target.closest(".remove-merged-order-btn");
+    if (!removeBtn) return;
+    removeMergedOrderId(removeBtn.dataset.orderId);
+    if (state.currentView === "mergeOrders") {
+      renderMergeOrdersPicker();
+    }
+    renderCheckoutSummary();
+  };
+
+  refs.mergeOrdersBody?.addEventListener("click", handleClick);
+  refs.checkoutSummary?.addEventListener("click", handleClick);
 }
 
 function renderCheckoutPaymentMethods() {
@@ -3713,6 +4084,9 @@ function renderAll() {
   if (state.currentView === "acerto") {
     renderSplitBill();
   }
+  if (state.currentView === "mergeOrders") {
+    renderMergeOrdersPicker();
+  }
 }
 
 async function openDetailDialog(orderId, options = {}) {
@@ -3762,16 +4136,10 @@ async function beginFinalizeFlowForOrderId(orderId) {
   }
 
   refs.detailCustomerFeedback.textContent = "";
-  refs.checkoutFeedback.textContent = "";
-  refs.serviceFeeInput.value = String(
-    state.config.useServiceFee ? order.serviceFeePercent || 10 : 0,
-  );
-  renderCheckoutPaymentMethods();
-  document.querySelectorAll(".payment-method").forEach((checkbox) => {
-    checkbox.checked = order.paymentMethods?.includes(checkbox.value) || false;
-  });
+  clearMergedOrders();
+  state.splitBillConfirmed = null;
+  if (!prepareCheckoutForCurrentOrder()) return;
   state.currentView = "checkout";
-  state.detailAction = null;
   renderCheckoutSummary();
   renderView();
 }
@@ -4634,9 +5002,18 @@ function bindEvents() {
     state.currentView = "main";
     state.detailAction = null;
     state.selectedOrderId = null;
+    state.splitBillConfirmed = null;
+    clearMergedOrders();
     refs.checkoutFeedback.textContent = "";
     renderAll();
   });
+  refs.openMergeOrdersButton?.addEventListener("click", () => {
+    openMergeOrdersDialog();
+  });
+  refs.closeMergeOrdersDialogButton?.addEventListener("click", () => {
+    closeMergeOrdersDialog();
+  });
+  bindMergeOrdersInteractionsOnce();
   refs.openSplitBillFromDetailButton?.addEventListener("click", () => {
     openSplitBillDialog("detail");
   });
@@ -4644,7 +5021,11 @@ function bindEvents() {
     openSplitBillDialog("checkout");
   });
   refs.closeAcertoDialogButton?.addEventListener("click", () => {
+    refs.splitBillFeedback.textContent = "";
     closeSplitBillDialog();
+  });
+  refs.confirmSplitBillButton?.addEventListener("click", () => {
+    void confirmSplitBillDialog();
   });
   bindSplitBillInteractionsOnce();
   refs.closeCashCloseHistoryButton?.addEventListener(
@@ -4662,7 +5043,7 @@ function bindEvents() {
   });
   refs.serviceFeeInput.addEventListener("input", renderCheckoutSummary);
 
-  refs.confirmCheckoutButton.addEventListener("click", () => {
+  refs.confirmCheckoutButton.addEventListener("click", async () => {
     const order = getCurrentOrder();
     if (!order) return;
     const paymentMethods = [
@@ -4673,7 +5054,7 @@ function bindEvents() {
         "Selecione ao menos uma forma de pagamento.";
       return;
     }
-    const subtotal = calculateOrderSubtotal(order);
+    const subtotal = calculateCheckoutSubtotal();
     const serviceFeePercent = state.config.useServiceFee
       ? Number(refs.serviceFeeInput.value) || 0
       : 0;
@@ -4691,16 +5072,36 @@ function bindEvents() {
         "Abra o caixa no Inicio antes de finalizar a comanda.";
       return;
     }
+
+    const mergedOrders = getMergedOrders();
+    for (const merged of mergedOrders) {
+      mergeItemsIntoOrder(target, merged);
+    }
+    for (const merged of mergedOrders) {
+      try {
+        await deleteCommandaRemote(merged.id);
+      } catch (_) {
+        /* servidor indisponivel */
+      }
+    }
+    const mergedIds = new Set(mergedOrders.map((entry) => String(entry.id)));
+    const nextOrders = orders.filter(
+      (entry) => !mergedIds.has(String(entry.id)),
+    );
+    state.cache.commandas = nextOrders;
+
     target.status = "Finalizado";
     target.paymentMethods = paymentMethods;
     target.serviceFeePercent = serviceFeePercent;
     target.totalPaid = totalPaid;
     target.closedAt = new Date().toISOString();
     target.shiftId = openShift.id;
-    saveOrders(orders);
+    saveOrders(nextOrders);
 
     state.currentView = "main";
     state.selectedOrderId = null;
+    state.splitBillConfirmed = null;
+    clearMergedOrders();
     renderAll();
   });
 
@@ -5337,14 +5738,32 @@ if (typeof globalThis.__JANA_REGISTER_TEST_EXPORTS__ === "function") {
     isPendingLocalOrder,
     getCurrentOrder,
     calculateOrderSubtotal,
+    clearMergedOrders,
+    getMergedOrders,
+    getMergeableOpenOrders,
+    getCheckoutCombinedItems,
+    calculateCheckoutSubtotal,
+    getSplitBillItemsSource,
+    mergeItemsIntoOrder,
+    addMergedOrderId,
+    removeMergedOrderId,
+    openMergeOrdersDialog,
+    closeMergeOrdersDialog,
+    renderMergeOrdersPicker,
+    renderCheckoutMergedOrdersSummary,
     clampSplitBillPersonCount,
     initSplitBillAssignments,
     resizeSplitBillAssignments,
     adjustSplitBillQty,
     computeSplitBillResult,
+    buildSplitBillConfirmedSnapshot,
+    getSplitBillConfirmedForOrder,
+    prepareCheckoutForCurrentOrder,
     openSplitBillDialog,
+    confirmSplitBillDialog,
     closeSplitBillDialog,
     renderSplitBill,
+    renderCheckoutSplitBillSummary,
     calculatePaidInDateRange,
     finalizedOrdersInLocalDateRange,
     aggregatePaymentMethodShares,
